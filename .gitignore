@@ -1,0 +1,4 @@
+*__pycache__*
+
+/fbs_venv
+/src/main/resources/base/config/*.pem
