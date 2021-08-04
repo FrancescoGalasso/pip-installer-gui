@@ -1,0 +1,6 @@
+fbs==0.9.0
+PyQt5==5.15.2
+PyInstaller==3.4
+qasync==0.13.0
+requests==2.25.1
+paramiko==2.7.2
