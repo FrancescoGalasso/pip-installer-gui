@@ -1,5 +1,5 @@
 {
-    "app_name": "Pip Installer Gui",
+    "app_name": "PipInstallerGui",
     "author": "Galasso Francesco",
     "main_module": "src/main/python/main.py",
     "version": "0.0.1"
