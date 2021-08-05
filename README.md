@@ -13,7 +13,7 @@ The project is based on Python 3.6 due to [fbs tool](https://build-system.fman.i
     (fbs_venv)$ pip install -r requirements-dev.txt
 
 ##### Win
-    > virtualenv fbs_venv
+    > virtualenv -p C:\Python36\python.exe fbs_venv
     > fbs_venv\Scripts\activate.bat
     (fbs_venv) > pip install -r requirements-dev.txt
 
