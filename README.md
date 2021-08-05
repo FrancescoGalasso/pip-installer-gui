@@ -5,7 +5,7 @@ Pip Installer Gui (aka PIG) is an application build upon PyQt5: install custom P
 The project is based on Python 3.6 due to [fbs tool](https://build-system.fman.io/manual/)
 
 
-#### Requirements
+## Requirements
 
 ##### Linux
     $ virtualenv -p /usr/bin/python3.6 fbs_venv/ 
@@ -17,7 +17,7 @@ The project is based on Python 3.6 due to [fbs tool](https://build-system.fman.i
     > fbs_venv\Scripts\activate.bat
     (fbs_venv) > pip install -r requirements-dev.txt
 
-#### File .pem
+## File .pem
 
 Pip Installer Gui (aka PIG) requires a .pem file in order to autenticate to a target machine.
 
@@ -40,3 +40,11 @@ Using Windows it is possibile to convert a .ppk file to a .pem file using PuTTYg
 	puttygen server1.ppk -O private-openssh -o server1.pem
 	chmod 400 server1.pem 
 
+
+## Release fbs application
+
+To release a new version it is necessary:
+
+1. execute the Python script [execute_pre_build_script](execute_pre_build_script.py)
+2. execute command `fbs freeze`
+3. execute command `fbs installer`
