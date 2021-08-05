@@ -209,15 +209,17 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             elif sys.platform == "win32":
                 _ping_counter = '-n 1'
 
-            cmd_ = f"ping {_ping_counter} -w 1000 {ip_to_validate}"
-            logging.warning(cmd_)
-            out = subprocess.run(cmd_, shell=True, check=True)
-            logging.warning(f'output ping subprocess > {out}')
-            if out.returncode == 1:
+            try:
+                cmd_ = f"ping {_ping_counter} -w 1000 {ip_to_validate}"
+                logging.warning(cmd_)
+                out = subprocess.run(cmd_, shell=True, check=True, timeout=5)
+                logging.warning(f'output ping subprocess > {out}')
+                if out.returncode == 0:
+                    result = {'message': f'IP {ip_to_validate} is valid and reachable!'}
+
+            except subprocess.CalledProcessError:
                 error_msg = f'IP {ip_to_validate} is valid! IP unreachable!'
                 result = {'error': error_msg}
-            else:
-                result = {'message': f'IP {ip_to_validate} is valid and reachable!'}
         else:
             error_msg = f'IP {ip_to_validate} is not valid IP'
             result = {'error': error_msg}
