@@ -1,6 +1,7 @@
 *__pycache__*
 
 /fbs_venv
+/target
 /src/main/resources/base/config/*.pem
 /src/main/resources/base/config/logger.cfg
 /src/main/resources/base/log/*.log
