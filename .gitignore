@@ -2,4 +2,5 @@
 
 /fbs_venv
 /src/main/resources/base/config/*.pem
+/src/main/resources/base/config/logger.cfg
 /src/main/resources/base/log/*.log
