@@ -368,6 +368,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                             remotepath=_tmp_remote_path)
             end_time = time.time()
             delta_time = end_time - start_time
+            self.processEvents()
             if hasattr(obj_, 'st_size') and obj_.st_size > 0:
                 # {'_flags': 15, 'st_size': 4, 'st_uid': 1001, 'st_gid': 1001, 'st_mode': 33204, 'st_atime': 1627568878, 'st_mtime': 1627568878, 'attr': {}}
                 logging.info(f'obj_ > {obj_}')
