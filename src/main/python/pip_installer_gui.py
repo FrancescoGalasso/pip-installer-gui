@@ -54,7 +54,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
 
         self.qline_ip.textChanged.connect(self.on_text_changed)
 
-        self.setFixedSize(800,600)
+        self.setFixedSize(1024,600)
         self.__init_ui()
 
     def handle_error(self, error_msg=None):  # pylint:  disable=no-self-use
@@ -152,9 +152,12 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             self.pushButton_clear.setEnabled(True)
 
     def __get_wheel_file(self):
-        wheel_file_dialog = QFileDialog()
-        path_whl = QFileDialog.getOpenFileName(parent=wheel_file_dialog,
-                                               filter ="wheel (*.whl)")
+        config_wheel_path = CACHE.get('wheel_path')
+        path_whl = QFileDialog.getOpenFileName(
+            QFileDialog(),
+            'Open file',
+            config_wheel_path,
+            "wheel (*.whl)",)
         self.qline_folder_path.setText(path_whl[0])
         logging.info(f'selected wheel file: {path_whl[0]}')
 
@@ -400,7 +403,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
                     for command in cmds_:
                         logging.info(f'Executing: {command}')
-                        _ , stdout, stderr = ssh_conn.exec_command(command)
+                        _, stdout, stderr = ssh_conn.exec_command(command)
                         for line in stdout.readlines():
                             _line = line.rstrip()
                             logging.info(_line)
