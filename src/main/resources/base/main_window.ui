@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
+    <width>1024</width>
     <height>600</height>
    </rect>
   </property>
@@ -19,18 +19,23 @@
      <rect>
       <x>-10</x>
       <y>0</y>
-      <width>821</width>
+      <width>1035</width>
       <height>611</height>
      </rect>
     </property>
     <widget class="QPushButton" name="btn_open_folder_files">
      <property name="geometry">
       <rect>
-       <x>500</x>
+       <x>630</x>
        <y>150</y>
-       <width>91</width>
+       <width>111</width>
        <height>31</height>
       </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>9</pointsize>
+      </font>
      </property>
      <property name="text">
       <string>choose wheel</string>
@@ -39,15 +44,15 @@
     <widget class="QLabel" name="config_label">
      <property name="geometry">
       <rect>
-       <x>310</x>
+       <x>380</x>
        <y>20</y>
-       <width>251</width>
-       <height>41</height>
+       <width>311</width>
+       <height>61</height>
       </rect>
      </property>
      <property name="font">
       <font>
-       <pointsize>17</pointsize>
+       <pointsize>21</pointsize>
        <weight>75</weight>
        <bold>true</bold>
       </font>
@@ -59,11 +64,16 @@
     <widget class="QLabel" name="label">
      <property name="geometry">
       <rect>
-       <x>20</x>
+       <x>110</x>
        <y>150</y>
        <width>101</width>
        <height>31</height>
       </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>11</pointsize>
+      </font>
      </property>
      <property name="text">
       <string>TINTING IP</string>
@@ -72,11 +82,16 @@
     <widget class="QLabel" name="label_4">
      <property name="geometry">
       <rect>
-       <x>360</x>
+       <x>450</x>
        <y>150</y>
-       <width>131</width>
+       <width>171</width>
        <height>31</height>
       </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>10</pointsize>
+      </font>
      </property>
      <property name="text">
       <string>choose wheel to install</string>
@@ -85,7 +100,7 @@
     <widget class="QLineEdit" name="qline_folder_path">
      <property name="geometry">
       <rect>
-       <x>610</x>
+       <x>750</x>
        <y>150</y>
        <width>171</width>
        <height>31</height>
@@ -98,17 +113,22 @@
     <widget class="QLineEdit" name="qline_ip">
      <property name="geometry">
       <rect>
-       <x>110</x>
+       <x>220</x>
        <y>150</y>
        <width>161</width>
        <height>31</height>
       </rect>
      </property>
+     <property name="font">
+      <font>
+       <pointsize>10</pointsize>
+      </font>
+     </property>
     </widget>
     <widget class="QLabel" name="config_label_2">
      <property name="geometry">
       <rect>
-       <x>340</x>
+       <x>430</x>
        <y>100</y>
        <width>191</width>
        <height>41</height>
@@ -116,7 +136,7 @@
      </property>
      <property name="font">
       <font>
-       <pointsize>13</pointsize>
+       <pointsize>14</pointsize>
        <weight>75</weight>
        <bold>true</bold>
       </font>
@@ -128,15 +148,15 @@
     <widget class="QLabel" name="config_label_3">
      <property name="geometry">
       <rect>
-       <x>320</x>
-       <y>200</y>
-       <width>191</width>
+       <x>410</x>
+       <y>210</y>
+       <width>211</width>
        <height>41</height>
       </rect>
      </property>
      <property name="font">
       <font>
-       <pointsize>13</pointsize>
+       <pointsize>14</pointsize>
        <weight>75</weight>
        <bold>true</bold>
       </font>
@@ -148,11 +168,16 @@
     <widget class="QPushButton" name="pushButton_install">
      <property name="geometry">
       <rect>
-       <x>210</x>
+       <x>240</x>
        <y>370</y>
-       <width>85</width>
-       <height>25</height>
+       <width>111</width>
+       <height>28</height>
       </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>10</pointsize>
+      </font>
      </property>
      <property name="text">
       <string>INSTALL</string>
@@ -163,9 +188,14 @@
       <rect>
        <x>90</x>
        <y>370</y>
-       <width>85</width>
-       <height>25</height>
+       <width>121</width>
+       <height>28</height>
       </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>10</pointsize>
+      </font>
      </property>
      <property name="text">
       <string>VALIDATE IP</string>
@@ -174,8 +204,8 @@
     <widget class="QLabel" name="version_lbl">
      <property name="geometry">
       <rect>
-       <x>370</x>
-       <y>60</y>
+       <x>490</x>
+       <y>70</y>
        <width>54</width>
        <height>17</height>
       </rect>
@@ -187,21 +217,31 @@
     <widget class="QComboBox" name="comboBox_venvs">
      <property name="geometry">
       <rect>
-       <x>30</x>
-       <y>260</y>
-       <width>131</width>
-       <height>25</height>
+       <x>110</x>
+       <y>270</y>
+       <width>161</width>
+       <height>28</height>
       </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>10</pointsize>
+      </font>
      </property>
     </widget>
     <widget class="QLabel" name="label_2">
      <property name="geometry">
       <rect>
-       <x>40</x>
-       <y>240</y>
-       <width>131</width>
+       <x>120</x>
+       <y>250</y>
+       <width>151</width>
        <height>17</height>
       </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>10</pointsize>
+      </font>
      </property>
      <property name="text">
       <string>Choose a virtualenv</string>
@@ -210,11 +250,16 @@
     <widget class="QPushButton" name="pushButton_clear">
      <property name="geometry">
       <rect>
-       <x>320</x>
+       <x>380</x>
        <y>370</y>
-       <width>85</width>
-       <height>25</height>
+       <width>111</width>
+       <height>28</height>
       </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>10</pointsize>
+      </font>
      </property>
      <property name="text">
       <string>CLEAR ALL</string>
@@ -223,11 +268,16 @@
     <widget class="QLabel" name="label_3">
      <property name="geometry">
       <rect>
-       <x>210</x>
-       <y>240</y>
-       <width>101</width>
+       <x>320</x>
+       <y>250</y>
+       <width>121</width>
        <height>21</height>
       </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>10</pointsize>
+      </font>
      </property>
      <property name="text">
       <string>Ignore Requires</string>
@@ -236,11 +286,16 @@
     <widget class="QComboBox" name="comboBox_requires">
      <property name="geometry">
       <rect>
-       <x>210</x>
-       <y>260</y>
-       <width>91</width>
-       <height>25</height>
+       <x>320</x>
+       <y>270</y>
+       <width>111</width>
+       <height>28</height>
       </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>10</pointsize>
+      </font>
      </property>
     </widget>
     <widget class="QTextBrowser" name="textBrowser_board">
@@ -248,9 +303,14 @@
       <rect>
        <x>30</x>
        <y>420</y>
-       <width>761</width>
+       <width>981</width>
        <height>171</height>
       </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>10</pointsize>
+      </font>
      </property>
     </widget>
    </widget>
