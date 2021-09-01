@@ -57,12 +57,6 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         self.setFixedSize(1024,600)
         self.__init_ui()
 
-    def handle_error(self, error_msg=None):  # pylint:  disable=no-self-use
-
-        if error_msg:
-            logging.critical(f'err: {error_msg}')
-            self.update_gui_msg_board(error_msg)
-
     def on_btn_validate_clicked(self):
         text_ip_to_check = self.qline_ip.text()
         result = self.parent.validate_ip_machine(text_ip_to_check)
@@ -197,39 +191,6 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         self.__async_qt_event_loop = self.__init_async_event_loop()
         self.run_forever()
 
-    def validate_ip_machine(self, ip_to_validate):  # pylint: disable=no-self-use
-
-        result = {}
-        flag_valid_ip = False
-        regex = "^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$"
-        if re.search(regex, ip_to_validate):
-            flag_valid_ip = True
-
-        if flag_valid_ip:
-
-            if sys.platform == "linux" or sys.platform == "linux2":
-                _ping_counter = '-c 1'
-            elif sys.platform == "win32":
-                _ping_counter = '-n 1'
-
-            try:
-                cmd_ = f"ping {_ping_counter} -w 1000 {ip_to_validate}"
-                logging.warning(cmd_)
-                out = subprocess.run(cmd_, shell=True, check=True, timeout=5)
-                logging.warning(f'output ping subprocess > {out}')
-                if out.returncode == 0:
-                    result = {'message': f'IP {ip_to_validate} is valid and reachable!'}
-
-            except subprocess.CalledProcessError:
-                error_msg = f'IP {ip_to_validate} is valid! IP unreachable!'
-                result = {'error': error_msg}
-        else:
-            error_msg = f'IP {ip_to_validate} is not valid IP'
-            result = {'error': error_msg}
-
-        logging.warning(f'result: {result}')
-        return result
-
     def install_on_target(self,
                           path_pem_file,
                           machine_ip,
@@ -295,57 +256,6 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         self.__async_qt_event_loop.close()
 
         sys.exit()
-
-    def __setup_logger(self, fbs_ctx):      # pylint: disable=no-self-use
-
-        path_pig_log_cfg = fbs_ctx.get_resource(PIG_LOG_CFG)
-        path_pig_log = fbs_ctx.get_resource(PIG_LOG_FILE)
-
-        with open(path_pig_log_cfg, 'r') as log_file:
-            config_log = log_file.read()
-
-        if 'testing.log' in config_log:
-            path_pig_log = path_pig_log.replace('\\', '\\\\')
-            config_log = config_log.replace('testing.log', path_pig_log)
-
-            logging.debug('config_log: {}'.format(config_log))
-            # Write the file out again
-            with open(path_pig_log_cfg, 'w') as log_file:
-                log_file.write(config_log)
-
-        logging.config.fileConfig(path_pig_log_cfg)
-
-    def __get_config(self, fbs_ctx, cfg_filename=CFG_FILE_NAME):    # pylint: disable=no-self-use
-
-        try:
-            filename_cfg = fbs_ctx.get_resource(cfg_filename)
-            logging.warning('filename_cfg: {}'.format({filename_cfg}))
-            with open(filename_cfg, 'r') as f_alias:
-                json_data = json.loads(f_alias.read())
-
-            logging.warning('json_data: {}'.format(json_data))
-            CACHE.update(json_data)
-
-        except FileNotFoundError:
-            file_not_found = '{} not FOUND!'.format(cfg_filename)
-            logging.warning(file_not_found)
-
-    def __validation_wheel_venv(self, app_names, venv_name, whl_path):  # pylint: disable=no-self-use
-        """
-        Check if selected wheel file is compatible with the selected venv name
-        """
-
-        whl_name = os.path.basename(whl_path)
-        validation_err_msg = f'Selected wheel ({whl_name}) not compatible with selected venv ({venv_name})!'
-        _validation = {'result': 'ko',
-                       'error': validation_err_msg}
-
-        for _app_name in app_names:
-            logging.info(f'app name > {_app_name} | venv name > {venv_name} | wheel name > {whl_name}')
-            if _app_name in venv_name and _app_name in whl_name:
-                _validation.update({'result': 'ok', 'error': None})
-
-        return _validation
 
     def __init_async_event_loop(self):
         qt_event_loop = QEventLoop(self)
@@ -423,3 +333,91 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         ssh_conn.close()
         logging.warning(f'closed ssh_conn ({ssh_conn})')
         self.main_window.setup_btn_ui('end_install')
+
+    @staticmethod
+    def __setup_logger(fbs_ctx):
+
+        path_pig_log_cfg = fbs_ctx.get_resource(PIG_LOG_CFG)
+        path_pig_log = fbs_ctx.get_resource(PIG_LOG_FILE)
+
+        with open(path_pig_log_cfg, 'r') as log_file:
+            config_log = log_file.read()
+
+        if 'testing.log' in config_log:
+            path_pig_log = path_pig_log.replace('\\', '\\\\')
+            config_log = config_log.replace('testing.log', path_pig_log)
+
+            logging.debug('config_log: {}'.format(config_log))
+            # Write the file out again
+            with open(path_pig_log_cfg, 'w') as log_file:
+                log_file.write(config_log)
+
+        logging.config.fileConfig(path_pig_log_cfg)
+
+    @staticmethod
+    def __get_config(fbs_ctx, cfg_filename=CFG_FILE_NAME):
+
+        try:
+            filename_cfg = fbs_ctx.get_resource(cfg_filename)
+            logging.warning('filename_cfg: {}'.format({filename_cfg}))
+            with open(filename_cfg, 'r') as f_alias:
+                json_data = json.loads(f_alias.read())
+
+            logging.warning('json_data: {}'.format(json_data))
+            CACHE.update(json_data)
+
+        except FileNotFoundError:
+            file_not_found = '{} not FOUND!'.format(cfg_filename)
+            logging.warning(file_not_found)
+
+    @staticmethod
+    def __validation_wheel_venv(app_names, venv_name, whl_path):
+        """
+        Check if selected wheel file is compatible with the selected venv name
+        """
+
+        whl_name = os.path.basename(whl_path)
+        validation_err_msg = f'Selected wheel ({whl_name}) not compatible with selected venv ({venv_name})!'
+        _validation = {'result': 'ko',
+                       'error': validation_err_msg}
+
+        for _app_name in app_names:
+            logging.info(f'app name > {_app_name} | venv name > {venv_name} | wheel name > {whl_name}')
+            if _app_name in venv_name and _app_name in whl_name:
+                _validation.update({'result': 'ok', 'error': None})
+
+        return _validation
+
+    @staticmethod
+    def validate_ip_machine(ip_to_validate):
+
+        result = {}
+        flag_valid_ip = False
+        regex = "^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$"
+        if re.search(regex, ip_to_validate):
+            flag_valid_ip = True
+
+        if flag_valid_ip:
+
+            if sys.platform == "linux" or sys.platform == "linux2":
+                _ping_counter = '-c 1'
+            elif sys.platform == "win32":
+                _ping_counter = '-n 1'
+
+            try:
+                cmd_ = f"ping {_ping_counter} -w 1000 {ip_to_validate}"
+                logging.warning(cmd_)
+                out = subprocess.run(cmd_, shell=True, check=True, timeout=5)
+                logging.warning(f'output ping subprocess > {out}')
+                if out.returncode == 0:
+                    result = {'message': f'IP {ip_to_validate} is valid and reachable!'}
+
+            except subprocess.CalledProcessError:
+                error_msg = f'IP {ip_to_validate} is valid! IP unreachable!'
+                result = {'error': error_msg}
+        else:
+            error_msg = f'IP {ip_to_validate} is not valid IP'
+            result = {'error': error_msg}
+
+        logging.warning(f'result: {result}')
+        return result
