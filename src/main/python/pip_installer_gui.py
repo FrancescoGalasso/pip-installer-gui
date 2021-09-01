@@ -54,6 +54,8 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
 
         self.qline_ip.textChanged.connect(self.on_text_changed)
 
+        self.comboBox_config_files.activated.connect(self.handle_pushButton_choose_conf)
+
         self.setFixedSize(1024,600)
         self.__init_ui()
 
@@ -62,9 +64,9 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         result = self.parent.validate_ip_machine(text_ip_to_check)
         self.update_gui_msg_board(result)
         if isinstance(result, dict) and 'error' in result.keys():
-            self.setup_btn_ui('validate_err')
+            self.setup_or_update_btn_ui('validate_err')
         elif isinstance(result, dict) and 'message' in result.keys():
-            self.setup_btn_ui('validated')
+            self.setup_or_update_btn_ui('validated')
 
     def on_btn_install_clicked(self):
 
@@ -80,13 +82,15 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
                 selected_venv = self.comboBox_venvs.currentText()
                 app_names_list = CACHE.get('app_names')
                 ignore_requires = self.comboBox_requires.currentText()
-                self.setup_btn_ui('start_install')
-                self.parent.install_on_target(path_pem_file,
-                                              ip_machine,
-                                              wheel_path,
-                                              selected_venv,
-                                              app_names_list,
-                                              ignore_requires)
+                self.setup_or_update_btn_ui('start_install')
+                deploy_choose = self.comboBox_config_files.currentText()
+                self.parent.install_and_deploy_on_target(path_pem_file,
+                                                         ip_machine,
+                                                         wheel_path,
+                                                         selected_venv,
+                                                         app_names_list,
+                                                         ignore_requires,
+                                                         deploy_choose)
 
         except FileNotFoundError:
             self.update_gui_msg_board('PEM File NOT found! Please contact IT support')
@@ -101,7 +105,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
 
     def on_btn_clear_clicked(self):
         self.update_gui_msg_board('Clearing all base settings')
-        self.setup_btn_ui('init')
+        self.setup_or_update_btn_ui('init_or_clear')
 
         self.qline_ip.setText('')
         self.qline_folder_path.setText('')
@@ -122,12 +126,15 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         self.textBrowser_board.ensureCursorVisible()
         self.textBrowser_board.insertPlainText(messag)
 
-    def setup_btn_ui(self, method):
+    def setup_or_update_btn_ui(self, method):
 
-        if method == 'init':
+        if method == 'init_or_clear':
             self.pushButton_validate.setEnabled(False)
             self.pushButton_install.setEnabled(False)
             self.pushButton_clear.setEnabled(True)
+            self.pushButton_choose_conf.setEnabled(False)
+            self.comboBox_requires.setCurrentIndex(0)
+            self.comboBox_config_files.setCurrentIndex(0)
         elif method == 'validated':
             self.pushButton_validate.setEnabled(False)
             self.pushButton_install.setEnabled(True)
@@ -140,10 +147,22 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             self.pushButton_validate.setEnabled(False)
             self.pushButton_install.setEnabled(False)
             self.pushButton_clear.setEnabled(False)
+            self.pushButton_choose_conf.setEnabled(False)
         elif method == 'end_install':
             self.pushButton_validate.setEnabled(False)
             self.pushButton_install.setEnabled(False)
             self.pushButton_clear.setEnabled(True)
+            self.pushButton_choose_conf.setEnabled(False)
+            self.comboBox_requires.setCurrentIndex(0)
+            self.comboBox_config_files.setCurrentIndex(0)
+
+    def handle_pushButton_choose_conf(self):
+        selected_choose = self.comboBox_config_files.currentText()
+
+        if selected_choose == 'yes':
+            self.pushButton_choose_conf.setEnabled(True)
+        else:
+            self.pushButton_choose_conf.setEnabled(False)
 
     def __get_wheel_file(self):
         config_wheel_path = CACHE.get('wheel_path')
@@ -159,7 +178,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
 
         app_version = self.ctx.build_settings.get('version')
         self.version_lbl.setText(app_version)
-        self.setup_btn_ui('init')
+        self.setup_or_update_btn_ui('init_or_clear')
         # self.textBrowser_board.ensureCursorVisible()
         if CACHE:
             self.has_config = True
@@ -171,6 +190,9 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
 
         for option in ['yes', 'no']:
             self.comboBox_requires.addItem(option, option)
+
+        for option in ['no', 'yes']:
+            self.comboBox_config_files.addItem(option, option)
 
 
 class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-instance-attributes
@@ -191,15 +213,19 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         self.__async_qt_event_loop = self.__init_async_event_loop()
         self.run_forever()
 
-    def install_on_target(self,
-                          path_pem_file,
-                          machine_ip,
-                          wheel_path,
-                          selected_venv_name,
-                          app_names_list,
-                          ignore_requires):
+    def install_and_deploy_on_target(self,
+                                     path_pem_file,
+                                     machine_ip,
+                                     wheel_path,
+                                     selected_venv_name,
+                                     app_names_list,
+                                     ignore_requires,
+                                     deploy_choose):
 
-        "Install the wheel into the target."
+        """
+        Install the selected wheel file into the target.
+        If deploy choose is selected, deploy the conf files to the target
+        """
 
         tmp_remote_path = CACHE.get('tmp_dir').get(selected_venv_name)
         venv_path = CACHE.get('venvs').get(selected_venv_name)
@@ -208,7 +234,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         if validation_result.get('result') == 'ko' and validation_result.get('error'):
             self.main_window.update_gui_msg_board(validation_result.get('error'))
-            self.main_window.setup_btn_ui('validated')
+            self.main_window.setup_or_update_btn_ui('validated')
         else:
             _username = 'admin'
             ssh_key = paramiko.RSAKey.from_private_key_file(path_pem_file)
@@ -229,6 +255,10 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                     selected_venv_name,
                     ignore_requires))
 
+    def deploy_on_target(self):
+        "Deploy the selected config files into the target"
+        self.main_window.update_gui_msg_board("TBA")
+
     def run_forever(self):
 
         self.main_window.show()
@@ -244,7 +274,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         finally:
 
-            logging.warning('**** closing PIG ***')
+            logging.warning('**** Closing Pip Installer Gui Application ***')
             logging.warning('')
 
         # https://doc.qt.io/qt-5/qobject.html#deleteLater
@@ -332,7 +362,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         ssh_conn.close()
         logging.warning(f'closed ssh_conn ({ssh_conn})')
-        self.main_window.setup_btn_ui('end_install')
+        self.main_window.setup_or_update_btn_ui('end_install')
 
     @staticmethod
     def __setup_logger(fbs_ctx):
