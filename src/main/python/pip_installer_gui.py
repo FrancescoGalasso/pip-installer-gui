@@ -51,6 +51,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         self.pushButton_validate.clicked.connect(self.on_btn_validate_clicked)
         self.pushButton_install.clicked.connect(self.on_btn_install_clicked)
         self.pushButton_clear.clicked.connect(self.on_btn_clear_clicked)
+        self.pushButton_choose_conf.clicked.connect(self.__get_conf_file_dir)
 
         self.qline_ip.textChanged.connect(self.on_text_changed)
 
@@ -83,14 +84,14 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
                 app_names_list = CACHE.get('app_names')
                 ignore_requires = self.comboBox_requires.currentText()
                 self.setup_or_update_btn_ui('start_install')
-                deploy_choose = self.comboBox_config_files.currentText()
+                deploy_user_choose = self.comboBox_config_files.currentText()
                 self.parent.install_and_deploy_on_target(path_pem_file,
                                                          ip_machine,
                                                          wheel_path,
                                                          selected_venv,
                                                          app_names_list,
                                                          ignore_requires,
-                                                         deploy_choose)
+                                                         deploy_user_choose)
 
         except FileNotFoundError:
             self.update_gui_msg_board('PEM File NOT found! Please contact IT support')
@@ -135,6 +136,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             self.pushButton_choose_conf.setEnabled(False)
             self.comboBox_requires.setCurrentIndex(0)
             self.comboBox_config_files.setCurrentIndex(0)
+            self.qline_folder_conf_path.setText('')
         elif method == 'validated':
             self.pushButton_validate.setEnabled(False)
             self.pushButton_install.setEnabled(True)
@@ -155,6 +157,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             self.pushButton_choose_conf.setEnabled(False)
             self.comboBox_requires.setCurrentIndex(0)
             self.comboBox_config_files.setCurrentIndex(0)
+            self.qline_folder_conf_path.setText('')
 
     def handle_pushButton_choose_conf(self):
         selected_choose = self.comboBox_config_files.currentText()
@@ -173,6 +176,16 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             "wheel (*.whl)",)
         self.qline_folder_path.setText(path_whl[0])
         logging.info(f'selected wheel file: {path_whl[0]}')
+
+    def __get_conf_file_dir(self):
+        conf_files_path = CACHE.get('conf_files_path')
+        path_whl = QFileDialog.getExistingDirectory(
+            QFileDialog(),
+            'Open Directory',
+            conf_files_path,
+            QFileDialog.ShowDirsOnly)
+        self.qline_folder_conf_path.setText(path_whl)
+        logging.info(f'selected wheel file: {path_whl}')
 
     def __init_ui(self):
 
