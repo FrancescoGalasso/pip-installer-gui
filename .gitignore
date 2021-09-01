@@ -3,5 +3,6 @@
 /fbs_venv
 /target
 **/config/logger.cfg
+**/config/pig-production.cfg
 *.pem
 *.log
