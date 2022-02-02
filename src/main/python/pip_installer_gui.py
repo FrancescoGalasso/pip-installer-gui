@@ -348,7 +348,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
                     cmds_ = [
                         f'{activate_on_target}; pip uninstall -y {app_name}',
-                        f'{activate_on_target}; pip install {venv_path}/{whl_filename} {cmd_ignore_requires}',
+                        f'{activate_on_target}; pip install {_tmp_remote_path} {cmd_ignore_requires}',
                     ]
 
                     cmds_.append('sudo supervisorctl reload')
