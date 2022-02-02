@@ -2,6 +2,7 @@
 
 /fbs_venv
 /target
+/test_whls
 **/config/logger.cfg
 **/config/pig-production.cfg
 *.pem
