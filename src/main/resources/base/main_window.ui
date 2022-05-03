@@ -170,7 +170,7 @@
       <rect>
        <x>240</x>
        <y>370</y>
-       <width>111</width>
+       <width>125</width>
        <height>28</height>
       </rect>
      </property>
@@ -188,7 +188,7 @@
       <rect>
        <x>90</x>
        <y>370</y>
-       <width>121</width>
+       <width>125</width>
        <height>28</height>
       </rect>
      </property>
@@ -255,9 +255,9 @@
     <widget class="QPushButton" name="pushButton_clear">
      <property name="geometry">
       <rect>
-       <x>380</x>
+       <x>550</x>
        <y>370</y>
-       <width>111</width>
+       <width>125</width>
        <height>28</height>
       </rect>
      </property>
@@ -338,7 +338,7 @@
     </widget>
     <widget class="QComboBox" name="comboBox_config_files">
      <property name="enabled">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <property name="geometry">
       <rect>
@@ -383,6 +383,24 @@
      </property>
      <property name="readOnly">
       <bool>true</bool>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="pushButton_deploy">
+     <property name="geometry">
+      <rect>
+       <x>400</x>
+       <y>370</y>
+       <width>125</width>
+       <height>28</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>10</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>DEPLOY CONF</string>
      </property>
     </widget>
    </widget>

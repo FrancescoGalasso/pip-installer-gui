@@ -20,6 +20,7 @@ import datetime
 import time
 import traceback
 import subprocess
+import glob
 import paramiko
 
 from PyQt5 import uic
@@ -50,6 +51,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         self.btn_open_folder_files.clicked.connect(self.__get_wheel_file)
         self.pushButton_validate.clicked.connect(self.on_btn_validate_clicked)
         self.pushButton_install.clicked.connect(self.on_btn_install_clicked)
+        self.pushButton_deploy.clicked.connect(self.on_btn_deploy_clicked)
         self.pushButton_clear.clicked.connect(self.on_btn_clear_clicked)
         self.pushButton_choose_conf.clicked.connect(self.__get_conf_file_dir)
 
@@ -98,6 +100,28 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         except Exception as excp: # pylint: disable=broad-except
             self.update_gui_msg_board(excp)
 
+    def on_btn_deploy_clicked(self):
+
+        try:
+            path_pem_file = self.ctx.get_resource(PEM_FILE)
+            ip_machine = self.qline_ip.text()
+            if self.qline_folder_conf_path.text() == '':
+                no_cfg_folder_msg = 'Please select a CONF Directory'
+                self.update_gui_msg_board(no_cfg_folder_msg)
+            else:
+                logging.warning('Start the wheel installation to remote machine')
+                cfg_folder_path = self.qline_folder_conf_path.text()
+                self.setup_or_update_btn_ui('start_deploy')
+                self.parent.deploy_on_target(
+                    path_pem_file,
+                    ip_machine,
+                    cfg_folder_path)
+
+        except FileNotFoundError:
+            self.update_gui_msg_board('PEM File NOT found! Please contact IT support')
+        except Exception as excp: # pylint: disable=broad-except
+            self.update_gui_msg_board(excp)
+
     def on_text_changed(self):
         if self.has_config:
             self.pushButton_validate.setEnabled(bool(self.qline_ip.text()))
@@ -132,32 +156,39 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         if method == 'init_or_clear':
             self.pushButton_validate.setEnabled(False)
             self.pushButton_install.setEnabled(False)
+            self.pushButton_deploy.setEnabled(False)
             self.pushButton_clear.setEnabled(True)
             self.pushButton_choose_conf.setEnabled(False)
             self.comboBox_requires.setCurrentIndex(0)
             self.comboBox_config_files.setCurrentIndex(0)
             self.qline_folder_conf_path.setText('')
+            self.qline_folder_path.setText('')
         elif method == 'validated':
             self.pushButton_validate.setEnabled(False)
             self.pushButton_install.setEnabled(True)
+            self.pushButton_deploy.setEnabled(True)
             self.pushButton_clear.setEnabled(True)
         elif method == 'validate_err':
             self.pushButton_validate.setEnabled(True)
             self.pushButton_install.setEnabled(False)
+            self.pushButton_deploy.setEnabled(False)
             self.pushButton_clear.setEnabled(True)
-        elif method == 'start_install':
+        elif method in ('start_install', 'start_deploy'):
             self.pushButton_validate.setEnabled(False)
             self.pushButton_install.setEnabled(False)
+            self.pushButton_deploy.setEnabled(False)
             self.pushButton_clear.setEnabled(False)
             self.pushButton_choose_conf.setEnabled(False)
-        elif method == 'end_install':
+        elif method in ('end_install', 'end_deploy'):
             self.pushButton_validate.setEnabled(False)
             self.pushButton_install.setEnabled(False)
+            self.pushButton_deploy.setEnabled(False)
             self.pushButton_clear.setEnabled(True)
             self.pushButton_choose_conf.setEnabled(False)
             self.comboBox_requires.setCurrentIndex(0)
             self.comboBox_config_files.setCurrentIndex(0)
             self.qline_folder_conf_path.setText('')
+            self.qline_folder_path.setText('')
 
     def handle_pushButton_choose_conf(self):
         selected_choose = self.comboBox_config_files.currentText()
@@ -249,28 +280,45 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             self.main_window.update_gui_msg_board(validation_result.get('error'))
             self.main_window.setup_or_update_btn_ui('validated')
         else:
-            _username = 'admin'
-            ssh_key = paramiko.RSAKey.from_private_key_file(path_pem_file)
-            ssh_conn = paramiko.SSHClient()
-            # ssh_conn.load_system_host_keys()
-            ssh_conn.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            # ssh_conn.set_missing_host_key_policy(paramiko.MissingHostKeyPolicy())
-            logging.warning("connecting")
-            ssh_conn.connect(hostname=machine_ip, username=_username, pkey=ssh_key)
-            logging.warning("connected")
+
+            ssh_conn = self.create_ssh_connection_to_server(machine_ip, path_pem_file)
 
             asyncio.ensure_future(
-                self.__async_install_on_target(
+                self.__async_install_and_deploy_on_target(
                     ssh_conn,
                     wheel_path,
                     venv_path,
                     tmp_remote_path,
                     selected_venv_name,
-                    ignore_requires))
+                    ignore_requires,
+                    deploy_choose)
+            )
 
-    def deploy_on_target(self):
+            # TODO: delete me! this is a test to verify che ssh transport connection active after asyncio.ensure_future
+            if ssh_conn.get_transport() is not None:
+                active = ssh_conn.get_transport().is_active()
+                logging.warning(f'ssh_conn active: {active}')
+
+    def deploy_on_target(
+            self,
+            path_pem_file,
+            ip_machine,
+            cfg_folder_path,):
+
         "Deploy the selected config files into the target"
-        self.main_window.update_gui_msg_board("TBA")
+
+        logging.warning(f'cfg_folder_path > {cfg_folder_path}')
+
+        try:
+            ssh_conn = self.create_ssh_connection_to_server(ip_machine, path_pem_file)
+            asyncio.ensure_future(
+                self.__async_deploy_on_target(
+                    ssh_conn,
+                    cfg_folder_path)
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logging.error(traceback.format_exc())
+            self.main_window.update_gui_msg_board(e)
 
     def run_forever(self):
 
@@ -305,70 +353,151 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         asyncio.set_event_loop(qt_event_loop)
         return qt_event_loop
 
-    async def __async_install_on_target(self,
+    async def __async_paramiko_sftp_put(self,
                                         ssh_conn,
-                                        wheel_path,
-                                        venv_path,
-                                        tmp_remote_path,
-                                        selected_venv_name,
-                                        ignore_requires):
+                                        local_path,
+                                        remote_path,
+                                        sftp=None,
+                                        print_to_gui=True):
+
+        # https://docs.paramiko.org/en/latest/api/sftp.html
+
+        if sftp is None:
+            sftp = ssh_conn.open_sftp()
+        start_time = time.time()
+        obj_ = sftp.put(
+            localpath=local_path,
+            remotepath=remote_path)
+        end_time = time.time()
+        delta_time = end_time - start_time
+        self.processEvents()
+
+        # sample of SFTPAttributes object
+        # {'_flags': 15, 'st_size': 4, 'st_uid': 1001, 'st_gid': 1001, 'st_mode': 33204, 'st_atime': 1627568878, 'st_mtime': 1627568878, 'attr': {}}
+
+        if not hasattr(obj_, 'st_size'):
+            raise AttributeError('SFTPAttributes object from "put" does not have the attribute "st_size"')
+
+        if not obj_.st_size != 0:
+            raise ValueError('SFTPAttributes object must have a size greater than 0')
+
+        logging.info(f'obj_ > {obj_}')
+        _original_file_size = os.stat(local_path).st_size
+        _copied_file_size = obj_.st_size
+        logging.debug(f'_copied_file_size({_copied_file_size}) - _original_file_size ({_original_file_size})')
+
+        if _original_file_size != _copied_file_size:
+            size_err_msg = f'Copied file size ({os.stat(local_path).st_size}) NOT equal to original file size ({obj_.st_size})'
+            raise ValueError(size_err_msg)
+
+        filename = os.path.basename(local_path)
+        copied_msg = f'{filename} was successfully copied in {delta_time}s!'
+        logging.info(copied_msg)
+        if print_to_gui:
+            self.main_window.update_gui_msg_board(copied_msg)
+
+    async def __async_upload_multiple_files(
+            self,
+            ssh_conn,
+            curr_cfg_folder_path,
+            conf_remote_path):
+
+        async def sftp_multiple_upload(path_files, remote_path_files, sftp_client):
+            for elem in path_files:
+                filename = os.path.basename(elem)
+                elem_remote_path = ''.join([remote_path_files, '/', filename])
+                logging.warning(f'elem_remote_path > {elem_remote_path}')
+                if os.path.isfile(elem):
+                    logging.warning(f'{elem} is a FILE')
+                    await self.__async_paramiko_sftp_put(
+                        ssh_conn=ssh_conn,
+                        local_path=elem,
+                        remote_path=elem_remote_path,
+                        sftp=sftp_client)
+                else:
+                    logging.warning(f'{elem} is a DIRECTORY')
+                    sftp_client.mkdir(elem_remote_path)
+                    logging.info(f'Created remote Directory named "{filename}"')
+                    logging.info(f'elements inside the DIRECTORY "{filename}" > {glob.glob(f"{elem}/*")}')
+                    dir_files = glob.glob(f"{elem}/*")
+                    remote_dir_files = f'{remote_path_files}/{filename}'
+                    await sftp_multiple_upload(
+                        path_files=dir_files,
+                        remote_path_files=remote_dir_files,
+                        sftp_client=sftp_client)
+
+        current_cfg_files = glob.glob(f"{curr_cfg_folder_path}/*")
+        logging.info(f"current_cfg_files: {current_cfg_files}")
+
+        sftp_client = ssh_conn.open_sftp()
+
+        await sftp_multiple_upload(
+            path_files=current_cfg_files,
+            remote_path_files=conf_remote_path,
+            sftp_client=sftp_client)
+
+        self.main_window.update_gui_msg_board(f'{curr_cfg_folder_path} successfully uploaded !')
+
+    async def __async_install_and_deploy_on_target(
+            self,
+            ssh_conn,
+            wheel_path,
+            venv_path,
+            tmp_remote_path,
+            selected_venv_name,
+            ignore_requires,
+            deploy_choose):
 
         try:
             logging.warning("copying wheel file")
             whl_filename = os.path.basename(wheel_path)
-            sftp = ssh_conn.open_sftp()
             _tmp_remote_path = ''.join([tmp_remote_path, '/', whl_filename])
-            logging.debug(f'wheel_path(local) > {wheel_path} || _tmp_remote_path > {_tmp_remote_path}  ')
-            start_time = time.time()
-            obj_ = sftp.put(localpath=wheel_path,
-                            remotepath=_tmp_remote_path)
-            end_time = time.time()
-            delta_time = end_time - start_time
-            self.processEvents()
-            if hasattr(obj_, 'st_size') and obj_.st_size > 0:
-                # {'_flags': 15, 'st_size': 4, 'st_uid': 1001, 'st_gid': 1001, 'st_mode': 33204, 'st_atime': 1627568878, 'st_mtime': 1627568878, 'attr': {}}
-                logging.info(f'obj_ > {obj_}')
-                _original_file_size = os.stat(wheel_path).st_size
-                _copied_file_size = obj_.st_size
-                logging.debug(f'_copied_file_size({_copied_file_size}) - _original_file_size ({_original_file_size})')
-                if _original_file_size != _copied_file_size:
-                    size_err_msg = f'copied file size ({os.stat(wheel_path).st_size}) NOT equal to original file size ({obj_.st_size})'
-                    self.main_window.update_gui_msg_board(size_err_msg)
-                else:
-                    copied_msg = f'{whl_filename} was successfully copied in {delta_time}s!'
-                    self.main_window.update_gui_msg_board(copied_msg)
-                    await asyncio.sleep(1)
-                    activate_on_target = f". {venv_path}/bin/activate"
-                    app_name = selected_venv_name.split(' - ')[0]
-                    logging.debug(f'app_name > {app_name}')
+            logging.warning(f'wheel_path(local) > {wheel_path} || _tmp_remote_path > {_tmp_remote_path}  ')
 
-                    cmd_ignore_requires = ''
-                    if ignore_requires == 'yes':
-                        cmd_ignore_requires = '--ignore-requires --no-dependencies'
+            res = await self.__async_paramiko_sftp_put(
+                    ssh_conn=ssh_conn,
+                    local_path=wheel_path,
+                    remote_path=_tmp_remote_path,)
 
-                    cmds_ = [
-                        f'{activate_on_target}; pip uninstall -y {app_name}',
-                        f'{activate_on_target}; pip install {_tmp_remote_path} {cmd_ignore_requires}',
-                    ]
+            if 'error' in res and res.get('status') == 'KO':
+                self.main_window.update_gui_msg_board(res.get('error'))
+                return
 
-                    cmds_.append('sudo supervisorctl reload')
-                    logging.warning(cmds_)
+            logging.warning('********* ************ ***********')
 
-                    for command in cmds_:
-                        logging.info(f'Executing: {command}')
-                        _, stdout, stderr = ssh_conn.exec_command(command)
-                        for line in stdout.readlines():
-                            _line = line.rstrip()
-                            logging.info(_line)
-                            self.main_window.update_gui_msg_board(_line)
-                        if stderr and stderr.read().decode() != '':
-                            ssh_errors = '{}'.format(stderr.read().decode())
-                            logging.error('Errors: {}'.format(ssh_errors))
-                            self.main_window.update_gui_msg_board(ssh_errors)
+            if res.get('status') == 'OK' and 'message' in res:
+                self.main_window.update_gui_msg_board(res.get('message'))
+                # return
+                await asyncio.sleep(1)
+                activate_on_target = f". {venv_path}/bin/activate"
+                app_name = selected_venv_name.split(' - ')[0]
+                logging.debug(f'app_name > {app_name}')
 
-                        await asyncio.sleep(.5)
-            else:
-                logging.warning('Something wrong with SFPT PUT')
+                cmd_ignore_requires = ''
+                if ignore_requires == 'yes':
+                    cmd_ignore_requires = '--ignore-requires --no-dependencies'
+
+                cmds_ = [
+                    f'{activate_on_target}; pip uninstall -y {app_name}',
+                    f'{activate_on_target}; pip install {_tmp_remote_path} {cmd_ignore_requires}',
+                ]
+
+                cmds_.append('sudo supervisorctl reload')
+                logging.warning(cmds_)
+
+                for command in cmds_:
+                    logging.info(f'Executing: {command}')
+                    _, stdout, stderr = ssh_conn.exec_command(command)
+                    for line in stdout.readlines():
+                        _line = line.rstrip()
+                        logging.info(_line)
+                        self.main_window.update_gui_msg_board(_line)
+                    if stderr and stderr.read().decode() != '':
+                        ssh_errors = '{}'.format(stderr.read().decode())
+                        logging.error('Errors: {}'.format(ssh_errors))
+                        self.main_window.update_gui_msg_board(ssh_errors)
+
+                    await asyncio.sleep(.5)
 
         except Exception:   # pylint: disable=broad-except
             logging.error(traceback.format_exc())
@@ -376,6 +505,62 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         ssh_conn.close()
         logging.warning(f'closed ssh_conn ({ssh_conn})')
         self.main_window.setup_or_update_btn_ui('end_install')
+
+    async def __async_deploy_on_target(
+            self, ssh_conn, cfg_folder_path):
+
+        conf_name = os.path.basename(cfg_folder_path)
+
+        try:
+            deploy_msg_start = f'Start to deploy conf "{conf_name}"'
+            logging.warning(f'{deploy_msg_start}' + f' ({cfg_folder_path})')
+            self.main_window.update_gui_msg_board(deploy_msg_start)
+
+            conf_remote_path = CACHE.get('remote_conf_path')
+
+            cmds_ = [
+                f'rm -rf {conf_remote_path}/custom_css/',
+                f'rm -rf {conf_remote_path}/*supervisor/',
+                f'rm {conf_remote_path}/dispatcher_conf.py',
+                f'rm {conf_remote_path}/flask_conf.py',
+                f'rm {conf_remote_path}/supervisord.conf',
+                f'rm {conf_remote_path}/labeler_conf.py',
+                f'rm {conf_remote_path}/marshall.elf',
+            ]
+            for command in cmds_:
+                logging.info(f'Executing: {command}')
+                _, stdout, stderr = ssh_conn.exec_command(command)
+                for line in stdout.readlines():
+                    _line = line.rstrip()
+                    logging.info(_line)
+                    self.main_window.update_gui_msg_board(_line)
+                if stderr and stderr.read().decode() != '':
+                    ssh_errors = '{}'.format(stderr.read().decode())
+                    if ssh_errors:
+                        logging.error('Errors: {}'.format(ssh_errors))
+                        self.main_window.update_gui_msg_board(ssh_errors)
+
+                await asyncio.sleep(.5)
+
+            self.main_window.update_gui_msg_board('Removed current CONF on TARGET !')
+
+            await self.__async_upload_multiple_files(
+                ssh_conn,
+                cfg_folder_path,
+                conf_remote_path)
+
+        except Exception as e:  # pylint: disable=broad-except
+            logging.error(traceback.format_exc())
+            self.main_window.update_gui_msg_board(e)
+            self.main_window.update_gui_msg_board('More details on log files')
+            failed_msg = f'Deploy CONFIG {conf_name} on target FAILED !!'
+            failed_msg += '\n\t THE ALFA SOFTWARE MAY STOP WORKING PROPERLY !'
+            self.main_window.update_gui_msg_board(failed_msg)
+        finally:
+            ssh_conn.close()
+            logging.warning(f'closed ssh_conn ({ssh_conn})')
+            self.main_window.setup_or_update_btn_ui('end_deploy')
+
 
     @staticmethod
     def __setup_logger(fbs_ctx):
@@ -408,6 +593,12 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
             logging.warning('json_data: {}'.format(json_data))
             CACHE.update(json_data)
+
+            if ('conf_remote_path', 'remote_supervisor_conf_path') not in CACHE:
+                CACHE.update({
+                    'remote_conf_path': '/opt/alfa/testconf',
+                    'remote_supervisor_conf_path': '/etc/supervisor/conf.d',
+                })
 
         except FileNotFoundError:
             file_not_found = '{} not FOUND!'.format(cfg_filename)
@@ -464,3 +655,19 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         logging.warning(f'result: {result}')
         return result
+
+    @staticmethod
+    def create_ssh_connection_to_server(machine_ip, path_pem_file):
+
+        """ Connect to an SSH server and authenticate to it """
+
+        _username = 'admin'
+        ssh_key = paramiko.RSAKey.from_private_key_file(path_pem_file)
+        ssh_client = paramiko.SSHClient()
+        # ssh_conn.load_system_host_keys()
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # ssh_conn.set_missing_host_key_policy(paramiko.MissingHostKeyPolicy())
+        logging.warning("connecting")
+        ssh_client.connect(hostname=machine_ip, username=_username, pkey=ssh_key)
+        logging.warning("connected")
+        return ssh_client
