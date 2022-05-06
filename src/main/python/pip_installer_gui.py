@@ -74,6 +74,10 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
     def on_btn_install_clicked(self):
 
         try:
+            map_str_to_bool = {
+                'yes': True,
+                'no': False
+            }
             path_pem_file = self.ctx.get_resource(PEM_FILE)
             ip_machine = self.qline_ip.text()
             if self.qline_folder_path.text() == '':
@@ -84,16 +88,17 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
                 wheel_path = self.qline_folder_path.text()
                 selected_venv = self.comboBox_venvs.currentText()
                 app_names_list = CACHE.get('app_names')
-                ignore_requires = self.comboBox_requires.currentText()
                 self.setup_or_update_btn_ui('start_install')
-                deploy_user_choose = self.comboBox_config_files.currentText()
-                self.parent.install_and_deploy_on_target(path_pem_file,
-                                                         ip_machine,
-                                                         wheel_path,
-                                                         selected_venv,
-                                                         app_names_list,
-                                                         ignore_requires,
-                                                         deploy_user_choose)
+                ignore_requires = map_str_to_bool.get(self.comboBox_requires.currentText())
+                deploy_user_choose = map_str_to_bool.get(self.comboBox_config_files.currentText())
+                self.parent.install_and_deploy_on_target(
+                    path_pem_file,
+                    ip_machine,
+                    wheel_path,
+                    selected_venv,
+                    app_names_list,
+                    ignore_requires,
+                    deploy_user_choose)
 
         except FileNotFoundError:
             self.update_gui_msg_board('PEM File NOT found! Please contact IT support')
@@ -294,11 +299,6 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                     deploy_choose)
             )
 
-            # TODO: delete me! this is a test to verify che ssh transport connection active after asyncio.ensure_future
-            if ssh_conn.get_transport() is not None:
-                active = ssh_conn.get_transport().is_active()
-                logging.warning(f'ssh_conn active: {active}')
-
     def deploy_on_target(
             self,
             path_pem_file,
@@ -396,6 +396,31 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         if print_to_gui:
             self.main_window.update_gui_msg_board(copied_msg)
 
+    async def __async_paramiko_exec_commands(self, ssh_conn, cmd_list):
+
+        if ssh_conn.get_transport() is None:
+            raise_msg = f"SSH CONNECTION TRANSPORT not founded! Failed to execute cmds {cmd_list}"
+            raise RuntimeError(raise_msg)
+
+        if not ssh_conn.get_transport().is_active():
+            raise_msg = f"SSH CONNECTION TRANSPORT is not active! Failed to execute cmds {cmd_list}"
+            raise RuntimeError(raise_msg)
+
+        for command in cmd_list:
+            logging.info(f'Executing: {command}')
+            _, stdout, stderr = ssh_conn.exec_command(command)
+            for line in stdout.readlines():
+                _line = line.rstrip()
+                logging.info(_line)
+                self.main_window.update_gui_msg_board(_line)
+            if stderr and stderr.read().decode() != '':
+                ssh_errors = '{}'.format(stderr.read().decode())
+                if ssh_errors:
+                    logging.error('Errors: {}'.format(ssh_errors))
+                    self.main_window.update_gui_msg_board(ssh_errors)
+
+            await asyncio.sleep(.5)
+
     async def __async_upload_multiple_files(
             self,
             ssh_conn,
@@ -406,16 +431,16 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             for elem in path_files:
                 filename = os.path.basename(elem)
                 elem_remote_path = ''.join([remote_path_files, '/', filename])
-                logging.warning(f'elem_remote_path > {elem_remote_path}')
+                logging.debug(f'elem_remote_path > {elem_remote_path}')
                 if os.path.isfile(elem):
-                    logging.warning(f'{elem} is a FILE')
+                    logging.info(f'{elem} is a FILE')
                     await self.__async_paramiko_sftp_put(
                         ssh_conn=ssh_conn,
                         local_path=elem,
                         remote_path=elem_remote_path,
                         sftp=sftp_client)
                 else:
-                    logging.warning(f'{elem} is a DIRECTORY')
+                    logging.info(f'{elem} is a DIRECTORY')
                     sftp_client.mkdir(elem_remote_path)
                     logging.info(f'Created remote Directory named "{filename}"')
                     logging.info(f'elements inside the DIRECTORY "{filename}" > {glob.glob(f"{elem}/*")}')
@@ -428,6 +453,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         current_cfg_files = glob.glob(f"{curr_cfg_folder_path}/*")
         logging.info(f"current_cfg_files: {current_cfg_files}")
+        current_cfg_name = os.path.basename(curr_cfg_folder_path)
 
         sftp_client = ssh_conn.open_sftp()
 
@@ -436,7 +462,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             remote_path_files=conf_remote_path,
             sftp_client=sftp_client)
 
-        self.main_window.update_gui_msg_board(f'{curr_cfg_folder_path} successfully uploaded !')
+        self.main_window.update_gui_msg_board(f'Successfully uploaded conf "{current_cfg_name}" [{curr_cfg_folder_path}] !!')
 
     async def __async_install_and_deploy_on_target(
             self,
@@ -454,60 +480,51 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             _tmp_remote_path = ''.join([tmp_remote_path, '/', whl_filename])
             logging.warning(f'wheel_path(local) > {wheel_path} || _tmp_remote_path > {_tmp_remote_path}  ')
 
-            res = await self.__async_paramiko_sftp_put(
+            await self.__async_paramiko_sftp_put(
+                ssh_conn=ssh_conn,
+                local_path=wheel_path,
+                remote_path=_tmp_remote_path,)
+
+            await asyncio.sleep(1)
+            activate_on_target = f". {venv_path}/bin/activate"
+            app_name = selected_venv_name.split(' - ')[0]
+            logging.debug(f'app_name > {app_name}')
+
+            cmd_ignore_requires = ''
+            if ignore_requires:
+                cmd_ignore_requires = '--ignore-requires --no-dependencies'
+
+            cmds_ = [
+                f'{activate_on_target}; pip uninstall -y {app_name}',
+                f'{activate_on_target}; pip install {_tmp_remote_path} {cmd_ignore_requires}',
+            ]
+            logging.warning(cmds_)
+            await self.__async_paramiko_exec_commands(
+                ssh_conn=ssh_conn,
+                cmd_list=cmds_)
+
+            if deploy_choose:
+                platform_config_path = self.main_window.qline_folder_conf_path.text()
+                logging.warning(f'platform_config_path >> {platform_config_path}')
+                await self.__async_deploy_on_target(
                     ssh_conn=ssh_conn,
-                    local_path=wheel_path,
-                    remote_path=_tmp_remote_path,)
+                    cfg_folder_path=platform_config_path,
+                    close_ssh=False)
 
-            if 'error' in res and res.get('status') == 'KO':
-                self.main_window.update_gui_msg_board(res.get('error'))
-                return
-
-            logging.warning('********* ************ ***********')
-
-            if res.get('status') == 'OK' and 'message' in res:
-                self.main_window.update_gui_msg_board(res.get('message'))
-                # return
-                await asyncio.sleep(1)
-                activate_on_target = f". {venv_path}/bin/activate"
-                app_name = selected_venv_name.split(' - ')[0]
-                logging.debug(f'app_name > {app_name}')
-
-                cmd_ignore_requires = ''
-                if ignore_requires == 'yes':
-                    cmd_ignore_requires = '--ignore-requires --no-dependencies'
-
-                cmds_ = [
-                    f'{activate_on_target}; pip uninstall -y {app_name}',
-                    f'{activate_on_target}; pip install {_tmp_remote_path} {cmd_ignore_requires}',
-                ]
-
-                cmds_.append('sudo supervisorctl reload')
-                logging.warning(cmds_)
-
-                for command in cmds_:
-                    logging.info(f'Executing: {command}')
-                    _, stdout, stderr = ssh_conn.exec_command(command)
-                    for line in stdout.readlines():
-                        _line = line.rstrip()
-                        logging.info(_line)
-                        self.main_window.update_gui_msg_board(_line)
-                    if stderr and stderr.read().decode() != '':
-                        ssh_errors = '{}'.format(stderr.read().decode())
-                        logging.error('Errors: {}'.format(ssh_errors))
-                        self.main_window.update_gui_msg_board(ssh_errors)
-
-                    await asyncio.sleep(.5)
+            await self.__async_paramiko_exec_commands(
+                ssh_conn=ssh_conn,
+                cmd_list=['sudo supervisorctl reload'])
 
         except Exception:   # pylint: disable=broad-except
             logging.error(traceback.format_exc())
 
-        ssh_conn.close()
-        logging.warning(f'closed ssh_conn ({ssh_conn})')
-        self.main_window.setup_or_update_btn_ui('end_install')
+        if ssh_conn.get_transport() is not None and ssh_conn.get_transport().is_active():
+            logging.warning(f'ssh_conn active: {ssh_conn.get_transport().is_active()}')
+            ssh_conn.close()
+            logging.warning(f'closed ssh_conn ({ssh_conn})')
+            self.main_window.setup_or_update_btn_ui('end_install')
 
-    async def __async_deploy_on_target(
-            self, ssh_conn, cfg_folder_path):
+    async def __async_deploy_on_target(self, ssh_conn, cfg_folder_path, close_ssh=True):
 
         conf_name = os.path.basename(cfg_folder_path)
 
@@ -527,20 +544,9 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                 f'rm {conf_remote_path}/labeler_conf.py',
                 f'rm {conf_remote_path}/marshall.elf',
             ]
-            for command in cmds_:
-                logging.info(f'Executing: {command}')
-                _, stdout, stderr = ssh_conn.exec_command(command)
-                for line in stdout.readlines():
-                    _line = line.rstrip()
-                    logging.info(_line)
-                    self.main_window.update_gui_msg_board(_line)
-                if stderr and stderr.read().decode() != '':
-                    ssh_errors = '{}'.format(stderr.read().decode())
-                    if ssh_errors:
-                        logging.error('Errors: {}'.format(ssh_errors))
-                        self.main_window.update_gui_msg_board(ssh_errors)
-
-                await asyncio.sleep(.5)
+            await self.__async_paramiko_exec_commands(
+                ssh_conn=ssh_conn,
+                cmd_list=cmds_)
 
             self.main_window.update_gui_msg_board('Removed current CONF on TARGET !')
 
@@ -552,15 +558,15 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         except Exception as e:  # pylint: disable=broad-except
             logging.error(traceback.format_exc())
             self.main_window.update_gui_msg_board(e)
-            self.main_window.update_gui_msg_board('More details on log files')
+            self.main_window.update_gui_msg_board('\t More details on log files')
             failed_msg = f'Deploy CONFIG {conf_name} on target FAILED !!'
             failed_msg += '\n\t THE ALFA SOFTWARE MAY STOP WORKING PROPERLY !'
             self.main_window.update_gui_msg_board(failed_msg)
-        finally:
+        
+        if close_ssh:
             ssh_conn.close()
             logging.warning(f'closed ssh_conn ({ssh_conn})')
             self.main_window.setup_or_update_btn_ui('end_deploy')
-
 
     @staticmethod
     def __setup_logger(fbs_ctx):
