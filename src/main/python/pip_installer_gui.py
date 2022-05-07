@@ -535,6 +535,11 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
             conf_remote_path = CACHE.get('remote_conf_path')
 
+            autostart_cmd_pt1 = 'grep -q "@/usr/bin/chromium" /home/admin/.config/lxsession/LXDE/autostart'
+            autostart_cmd_pt2 = '&& (sed -i "/chromium --disable-restore-session-state --no-first-run --kiosk/d" /opt/alfa/testconf/autostart)'
+            if 'alfalib' in conf_name:
+                autostart_cmd_pt2 = '|| (echo "@/usr/bin/chromium --disable-restore-session-state --no-first-run --kiosk 127.0.0.1" | sudo tee -a /opt/alfa/testconf/autostart)'
+
             cmds_ = [
                 f'rm -rf {conf_remote_path}/custom_css/',
                 f'rm -rf {conf_remote_path}/*supervisor/',
@@ -543,6 +548,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                 f'rm {conf_remote_path}/supervisord.conf',
                 f'rm {conf_remote_path}/labeler_conf.py',
                 f'rm {conf_remote_path}/marshall.elf',
+                f'{autostart_cmd_pt1} {autostart_cmd_pt2}',
             ]
             await self.__async_paramiko_exec_commands(
                 ssh_conn=ssh_conn,
