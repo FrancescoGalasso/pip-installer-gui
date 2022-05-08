@@ -534,11 +534,12 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             self.main_window.update_gui_msg_board(deploy_msg_start)
 
             conf_remote_path = CACHE.get('remote_conf_path')
+            autostart_remote_path = CACHE.get("remote_autostart_path")
 
             autostart_cmd_pt1 = 'grep -q "@/usr/bin/chromium" /home/admin/.config/lxsession/LXDE/autostart'
-            autostart_cmd_pt2 = '&& (sed -i "/chromium --disable-restore-session-state --no-first-run --kiosk/d" /opt/alfa/testconf/autostart)'
+            autostart_cmd_pt2 = f'&& (sed -i "/chromium --disable-restore-session-state --no-first-run --kiosk/d" {autostart_remote_path})'
             if 'alfalib' in conf_name:
-                autostart_cmd_pt2 = '|| (echo "@/usr/bin/chromium --disable-restore-session-state --no-first-run --kiosk 127.0.0.1" | sudo tee -a /opt/alfa/testconf/autostart)'
+                autostart_cmd_pt2 = f'|| (echo "@/usr/bin/chromium --disable-restore-session-state --no-first-run --kiosk 127.0.0.1" | sudo tee -a {autostart_remote_path})'
 
             cmds_ = [
                 f'rm -rf {conf_remote_path}/custom_css/',
@@ -606,10 +607,11 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             logging.warning('json_data: {}'.format(json_data))
             CACHE.update(json_data)
 
-            if ('conf_remote_path', 'remote_supervisor_conf_path') not in CACHE:
+            if ('conf_remote_path', 'remote_supervisor_conf_path', 'remote_autostart_path') not in CACHE:
                 CACHE.update({
-                    'remote_conf_path': '/opt/alfa/testconf',
+                    'remote_conf_path': '/opt/alfa/conf',
                     'remote_supervisor_conf_path': '/etc/supervisor/conf.d',
+                    'remote_autostart_path': '/home/admin/.config/lxsession/LXDE/autostart',
                 })
 
         except FileNotFoundError:
