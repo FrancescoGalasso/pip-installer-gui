@@ -313,8 +313,9 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             ssh_conn = self.create_ssh_connection_to_server(ip_machine, path_pem_file)
             asyncio.ensure_future(
                 self.__async_deploy_on_target(
-                    ssh_conn,
-                    cfg_folder_path)
+                    ssh_conn=ssh_conn,
+                    cfg_folder_path=cfg_folder_path,
+                    reload_supervisor=True)
             )
         except Exception as e:  # pylint: disable=broad-except
             logging.error(traceback.format_exc())
@@ -396,7 +397,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         if print_to_gui:
             self.main_window.update_gui_msg_board(copied_msg)
 
-    async def __async_paramiko_exec_commands(self, ssh_conn, cmd_list):
+    async def __async_paramiko_exec_commands(self, ssh_conn, cmd_list, timeout=.5):
 
         if ssh_conn.get_transport() is None:
             raise_msg = f"SSH CONNECTION TRANSPORT not founded! Failed to execute cmds {cmd_list}"
@@ -419,7 +420,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                     logging.error('Errors: {}'.format(ssh_errors))
                     self.main_window.update_gui_msg_board(ssh_errors)
 
-            await asyncio.sleep(.5)
+            await asyncio.sleep(timeout)
 
     async def __async_upload_multiple_files(
             self,
@@ -462,7 +463,14 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             remote_path_files=conf_remote_path,
             sftp_client=sftp_client)
 
-        self.main_window.update_gui_msg_board(f'Successfully uploaded conf "{current_cfg_name}" [{curr_cfg_folder_path}] !!')
+        if 'alfalib' in current_cfg_name and any('supervisor_conf.d' in p for p in current_cfg_files):
+            supervisor_cmds = [
+                f'sudo cp -r {CACHE.get("remote_conf_path")}/supervisor_conf.d/* {CACHE.get("remote_supervisor_conf_path")}',
+                f'sudo rm -rf {CACHE.get("remote_conf_path")}/supervisor_conf.d/'
+            ]
+            await self.__async_paramiko_exec_commands(
+                ssh_conn=ssh_conn,
+                cmd_list=supervisor_cmds)
 
     async def __async_install_and_deploy_on_target(
             self,
@@ -524,7 +532,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             logging.warning(f'closed ssh_conn ({ssh_conn})')
             self.main_window.setup_or_update_btn_ui('end_install')
 
-    async def __async_deploy_on_target(self, ssh_conn, cfg_folder_path, close_ssh=True):
+    async def __async_deploy_on_target(self, ssh_conn, cfg_folder_path, close_ssh=True, reload_supervisor=False):
 
         conf_name = os.path.basename(cfg_folder_path)
 
@@ -535,6 +543,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
             conf_remote_path = CACHE.get('remote_conf_path')
             autostart_remote_path = CACHE.get("remote_autostart_path")
+            supervisor_conf_remote_path = CACHE.get("remote_supervisor_conf_path")
 
             autostart_cmd_pt1 = 'grep -q "@/usr/bin/chromium" /home/admin/.config/lxsession/LXDE/autostart'
             autostart_cmd_pt2 = f'&& (sed -i "/chromium --disable-restore-session-state --no-first-run --kiosk/d" {autostart_remote_path})'
@@ -544,12 +553,17 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             cmds_ = [
                 f'rm -rf {conf_remote_path}/custom_css/',
                 f'rm -rf {conf_remote_path}/*supervisor/',
+                f'rm -rf {conf_remote_path}/supervisor_conf.d/',
                 f'rm {conf_remote_path}/dispatcher_conf.py',
                 f'rm {conf_remote_path}/flask_conf.py',
                 f'rm {conf_remote_path}/supervisord.conf',
                 f'rm {conf_remote_path}/labeler_conf.py',
                 f'rm {conf_remote_path}/marshall.elf',
                 f'{autostart_cmd_pt1} {autostart_cmd_pt2}',
+                f'sudo rm {supervisor_conf_remote_path}/alfadesk.conf',
+                f'sudo rm {supervisor_conf_remote_path}/alfadesk.conf.BAK',
+                f'sudo rm {supervisor_conf_remote_path}/dispatcher.conf',
+                f'sudo rm {supervisor_conf_remote_path}/dispatcher.conf.BAK',
             ]
             await self.__async_paramiko_exec_commands(
                 ssh_conn=ssh_conn,
@@ -561,6 +575,17 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                 ssh_conn,
                 cfg_folder_path,
                 conf_remote_path)
+
+            final_cmds = ['sudo /etc/init.d/lightdm restart']
+            if reload_supervisor:
+                final_cmds.append('sudo supervisorctl reload')
+
+            await self.__async_paramiko_exec_commands(
+                ssh_conn=ssh_conn,
+                cmd_list=final_cmds,
+                timeout=1.5)
+
+            self.main_window.update_gui_msg_board(f'Successfully uploaded conf "{conf_name}"!! [{cfg_folder_path}]')
 
         except Exception as e:  # pylint: disable=broad-except
             logging.error(traceback.format_exc())
@@ -607,7 +632,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             logging.warning('json_data: {}'.format(json_data))
             CACHE.update(json_data)
 
-            if ('conf_remote_path', 'remote_supervisor_conf_path', 'remote_autostart_path') not in CACHE:
+            remote_keys = ('conf_remote_path', 'remote_supervisor_conf_path', 'remote_autostart_path')
+            if remote_keys not in CACHE:
                 CACHE.update({
                     'remote_conf_path': '/opt/alfa/conf',
                     'remote_supervisor_conf_path': '/etc/supervisor/conf.d',
