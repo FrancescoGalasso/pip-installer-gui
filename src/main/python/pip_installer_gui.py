@@ -134,13 +134,15 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             self.pushButton_validate.setEnabled(False)
 
     def on_btn_clear_clicked(self):
-        self.update_gui_msg_board('Clearing all base settings')
+        self.update_gui_msg_board(
+            msg='Clearing all base settings',
+            pretty_print=True)
         self.setup_or_update_btn_ui('init_or_clear')
 
         self.qline_ip.setText('')
         self.qline_folder_path.setText('')
 
-    def update_gui_msg_board(self, msg):
+    def update_gui_msg_board(self, msg, show_datetime=True, pretty_print=False):
         formatted_date = datetime.datetime.fromtimestamp(time.time()).strftime('%d %b %y %H:%M:%S')
         _msg = msg
         # logging.debug(f'{type(msg)} >> {msg}')
@@ -150,8 +152,13 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             else:
                 _msg = msg.get('message')
 
-        messag = f'[{formatted_date}] {_msg}\n'
+        messag = f'{_msg}\n'
+        if show_datetime:
+            messag = f'[{formatted_date}] {messag}'
+        if pretty_print:
+            messag = f'\n{messag}\n'
         logging.warning(f'messag >> {messag}')
+
         self.textBrowser_board.moveCursor(QTextCursor.End)
         self.textBrowser_board.ensureCursorVisible()
         self.textBrowser_board.insertPlainText(messag)
