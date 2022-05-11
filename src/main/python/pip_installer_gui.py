@@ -74,7 +74,6 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             self.update_gui_msg_board(exc)
             self.setup_or_update_btn_ui('validate_err')
 
-
     def on_btn_install_clicked(self):
 
         try:
@@ -118,7 +117,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
                 no_cfg_folder_msg = 'Please select a CONF Directory'
                 self.update_gui_msg_board(no_cfg_folder_msg)
             else:
-                logging.warning('Start the wheel installation to remote machine')
+                logging.warning('Start the config deploy to remote machine')
                 cfg_folder_path = self.qline_folder_conf_path.text()
                 self.setup_or_update_btn_ui('start_deploy')
                 self.parent.deploy_on_target(
@@ -179,22 +178,26 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             self.comboBox_config_files.setCurrentIndex(0)
             self.qline_folder_conf_path.setText('')
             self.qline_folder_path.setText('')
+            self.comboBox_config_files.setEnabled(False)
         elif method == 'validated':
             self.pushButton_validate.setEnabled(False)
             self.pushButton_install.setEnabled(True)
             self.pushButton_deploy.setEnabled(True)
             self.pushButton_clear.setEnabled(True)
+            self.comboBox_config_files.setEnabled(True)
         elif method == 'validate_err':
             self.pushButton_validate.setEnabled(True)
             self.pushButton_install.setEnabled(False)
             self.pushButton_deploy.setEnabled(False)
             self.pushButton_clear.setEnabled(True)
+            self.comboBox_config_files.setEnabled(False)
         elif method in ('start_install', 'start_deploy'):
             self.pushButton_validate.setEnabled(False)
             self.pushButton_install.setEnabled(False)
             self.pushButton_deploy.setEnabled(False)
             self.pushButton_clear.setEnabled(False)
             self.pushButton_choose_conf.setEnabled(False)
+            self.comboBox_config_files.setEnabled(False)
         elif method in ('end_install', 'end_deploy'):
             self.pushButton_validate.setEnabled(False)
             self.pushButton_install.setEnabled(False)
@@ -205,6 +208,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             self.comboBox_config_files.setCurrentIndex(0)
             self.qline_folder_conf_path.setText('')
             self.qline_folder_path.setText('')
+            self.comboBox_config_files.setEnabled(False)
 
     def handle_pushButton_choose_conf(self):
         selected_choose = self.comboBox_config_files.currentText()
@@ -692,8 +696,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             if out.returncode == 0:
                 result = {'message': f'IP {ip_to_validate} is valid and reachable!'}
 
-        except subprocess.CalledProcessError:
-            raise RuntimeError(f'IP {ip_to_validate} is valid! IP unreachable!')
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f'IP {ip_to_validate} is valid! IP unreachable!') from e
 
         logging.warning(f'result: {result}')
         return result
