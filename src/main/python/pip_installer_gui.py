@@ -63,13 +63,17 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         self.__init_ui()
 
     def on_btn_validate_clicked(self):
-        text_ip_to_check = self.qline_ip.text()
-        result = self.parent.validate_ip_machine(text_ip_to_check)
-        self.update_gui_msg_board(result)
-        if isinstance(result, dict) and 'error' in result.keys():
-            self.setup_or_update_btn_ui('validate_err')
-        elif isinstance(result, dict) and 'message' in result.keys():
+
+        try:
+            text_ip_to_check = self.qline_ip.text()
+            result = self.parent.validate_ip_machine(text_ip_to_check)
             self.setup_or_update_btn_ui('validated')
+            self.update_gui_msg_board(result)
+        except Exception as exc:    # pylint: disable=broad-except
+            logging.error(traceback.format_exc())
+            self.update_gui_msg_board(exc)
+            self.setup_or_update_btn_ui('validate_err')
+
 
     def on_btn_install_clicked(self):
 
@@ -672,33 +676,24 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
     @staticmethod
     def validate_ip_machine(ip_to_validate):
 
-        result = {}
-        flag_valid_ip = False
         regex = "^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$"
-        if re.search(regex, ip_to_validate):
-            flag_valid_ip = True
+        error_regex_msg = f'IP {ip_to_validate} is not valid IP'
+        assert re.search(regex, ip_to_validate), error_regex_msg
 
-        if flag_valid_ip:
+        ping_counter = '-n 1'
+        if sys.platform == "linux" or sys.platform == "linux2":
+            ping_counter = '-c 1'            
 
-            if sys.platform == "linux" or sys.platform == "linux2":
-                _ping_counter = '-c 1'
-            elif sys.platform == "win32":
-                _ping_counter = '-n 1'
+        try:
+            cmd_ = f"ping {ping_counter} -w 1000 {ip_to_validate}"
+            logging.warning(cmd_)
+            out = subprocess.run(cmd_, shell=True, check=True, timeout=5)
+            logging.warning(f'output ping subprocess > {out}')
+            if out.returncode == 0:
+                result = {'message': f'IP {ip_to_validate} is valid and reachable!'}
 
-            try:
-                cmd_ = f"ping {_ping_counter} -w 1000 {ip_to_validate}"
-                logging.warning(cmd_)
-                out = subprocess.run(cmd_, shell=True, check=True, timeout=5)
-                logging.warning(f'output ping subprocess > {out}')
-                if out.returncode == 0:
-                    result = {'message': f'IP {ip_to_validate} is valid and reachable!'}
-
-            except subprocess.CalledProcessError:
-                error_msg = f'IP {ip_to_validate} is valid! IP unreachable!'
-                result = {'error': error_msg}
-        else:
-            error_msg = f'IP {ip_to_validate} is not valid IP'
-            result = {'error': error_msg}
+        except subprocess.CalledProcessError:
+            raise RuntimeError(f'IP {ip_to_validate} is valid! IP unreachable!')
 
         logging.warning(f'result: {result}')
         return result
