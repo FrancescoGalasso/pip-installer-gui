@@ -437,6 +437,32 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
             await asyncio.sleep(timeout)
 
+    async def __validate_platform_alfa(self, ssh_client):
+        """
+        Platform alfa must be a generic-purpose platform in order to
+        deploy configs.
+        """
+
+        validated = False
+        lsb_release = {}
+
+        try:
+            with ssh_client.open_sftp() as sftp_client:
+                with sftp_client.open('/etc/lsb-release') as remote_file:
+                    for line in remote_file:
+                        (key, value) = line.split('=')
+                        value = value.strip('\"\n')
+                        lsb_release[key] = value
+
+            logging.debug(lsb_release)
+            validated = 'general-purpose' in lsb_release.get('DISTRIB_DESCRIPTION', None)
+            validated = validated and lsb_release.get('PLATFORM_VERSION', None)
+        except Exception as excpp:
+            logging.error('Impossible to verify the Alfa Platform!')
+            logging.error(excpp)
+
+        return validated
+
     async def __async_upload_multiple_files(
             self,
             ssh_conn,
@@ -552,6 +578,11 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         conf_name = os.path.basename(cfg_folder_path)
 
         try:
+            validated_platform = await self.__validate_platform_alfa(ssh_conn)
+            assert_err_msg = 'Invalid platform version! The current platform is not an "Alfa custom general-purpose platform" !'
+            assert_err_msg += '\n\t Aborting config deploying!'
+            assert validated_platform, assert_err_msg
+
             deploy_msg_start = f'Start to deploy conf "{conf_name}"'
             logging.warning(f'{deploy_msg_start}' + f' ({cfg_folder_path})')
             self.main_window.update_gui_msg_board(deploy_msg_start)
@@ -598,10 +629,13 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             await self.__async_paramiko_exec_commands(
                 ssh_conn=ssh_conn,
                 cmd_list=final_cmds,
-                timeout=1.5)
+                timeout=3)
 
             self.main_window.update_gui_msg_board(f'Successfully uploaded conf "{conf_name}"!! [{cfg_folder_path}]')
 
+        except AssertionError as aerr:
+            logging.error(traceback.format_exc())
+            self.main_window.update_gui_msg_board(aerr)
         except Exception as e:  # pylint: disable=broad-except
             logging.error(traceback.format_exc())
             self.main_window.update_gui_msg_board(e)
