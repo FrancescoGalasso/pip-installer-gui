@@ -23,6 +23,7 @@ import subprocess
 import glob
 import paramiko
 
+from deepdiff import DeepDiff
 from PyQt5 import uic
 from PyQt5.QtWidgets import QMainWindow, QApplication, QFileDialog
 from PyQt5.QtGui import QTextCursor
@@ -463,6 +464,55 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         return validated
 
+    async def __validate_config(self, conf_name, conf_path):
+        """
+        Config folder name must be check (we do not want to remote copy
+        files from a wrong folder or from a subfolder inside the Config folder)
+
+        We check also the config structure folder to check the validity of
+        the configuration.
+        """
+
+        cfg_validated = True
+        # TODO: get fcg names from cfg file
+        validate_cfg_names = [
+            'RBpi_alfalib',
+            'RBpi_CR4_485',
+            'RBpi_CR6_485',
+        ]
+
+        def generate_folder_tree_dict(path):
+            folder_tree_dict = {'name': os.path.basename(path)}
+            if os.path.isdir(path):
+                folder_tree_dict['type'] = "directory"
+                folder_tree_dict["contents"] = [
+                    generate_folder_tree_dict(os.path.join(path, x))
+                    for x in os.listdir(path)
+                    if "tree_validator" not in x
+                ]
+            else:
+                folder_tree_dict['type'] = "file"
+            return folder_tree_dict
+
+        try:
+
+            assert conf_name in validate_cfg_names
+
+            validator_tree_file_path = os.path.join(conf_path, f'{conf_path}/{conf_name}_tree_validator')
+            config_folder_dict = generate_folder_tree_dict(conf_path)
+
+            with open(validator_tree_file_path) as f:
+                validator_tree_dict = json.load(f)
+                diff_dict = DeepDiff(validator_tree_dict, config_folder_dict, ignore_order=True)
+                logging.info(f'diff_dict >>>> {diff_dict}')
+                assert not diff_dict
+
+        except Exception as excpt:
+            cfg_validated = False
+            logging.warning(excpt)
+
+        return cfg_validated
+
     async def __async_upload_multiple_files(
             self,
             ssh_conn,
@@ -579,9 +629,14 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         try:
             validated_platform = await self.__validate_platform_alfa(ssh_conn)
-            assert_err_msg = 'Invalid platform version! The current platform is not an "Alfa custom general-purpose platform" !'
-            assert_err_msg += '\n\t Aborting config deploying!'
-            assert validated_platform, assert_err_msg
+            assert_err_msg_platform = 'Invalid platform version! The current platform is not an "Alfa custom general-purpose platform" !'
+            assert_err_msg_platform += '\n\t Aborting config deploying!'
+            assert validated_platform, assert_err_msg_platform
+
+            validated_config = await self.__validate_config(conf_name, cfg_folder_path)
+            assert_err_msg_cfg = f'Invalid Config Structure! The current Config "{conf_name}" is unsuitable!'
+            assert_err_msg_cfg += '\n\t Aborting config deploying!'
+            assert validated_config, assert_err_msg_cfg
 
             deploy_msg_start = f'Start to deploy conf "{conf_name}"'
             logging.warning(f'{deploy_msg_start}' + f' ({cfg_folder_path})')
