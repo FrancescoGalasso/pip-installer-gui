@@ -23,6 +23,7 @@ import subprocess
 import glob
 import paramiko
 
+from pip_errors import PipValidationError
 from deepdiff import DeepDiff
 from PyQt5 import uic
 from PyQt5.QtWidgets import QMainWindow, QApplication, QFileDialog
@@ -458,9 +459,16 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             logging.debug(lsb_release)
             validated = 'general-purpose' in lsb_release.get('DISTRIB_DESCRIPTION', None)
             validated = validated and lsb_release.get('PLATFORM_VERSION', None)
+
+        except IOError as e:
+            no_lsbrelease_file_found_msg = 'File "lsb-release" not found ! Validation failed !'
+            no_lsbrelease_file_found_msg += '\n ABORTING ...'
+            raise PipValidationError(no_lsbrelease_file_found_msg) from e
         except Exception as excpp:
-            logging.error('Impossible to verify the Alfa Platform!')
-            logging.error(excpp)
+            validation_platform_excp_err = 'Impossible to verify the Alfa Platform! Please read log file for more details.'
+            validation_platform_excp_err += '\n ABORTING ...'
+            logging.error(traceback.format_exc())
+            raise PipValidationError(validation_platform_excp_err) from excpp
 
         return validated
 
@@ -469,17 +477,18 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         Config folder name must be check (we do not want to remote copy
         files from a wrong folder or from a subfolder inside the Config folder)
 
-        We check also the config structure folder to check the validity of
+        We then compare the tree json file (produced using the Linux command
+        'tree -J <folder conf>') with the same structure generated
+        at runtime from the path provided to check the validity of
         the configuration.
         """
 
         cfg_validated = True
-        # TODO: get fcg names from cfg file
-        validate_cfg_names = [
-            'RBpi_alfalib',
-            'RBpi_CR4_485',
-            'RBpi_CR6_485',
-        ]
+        validate_cfg_names = CACHE.get('configurations', [])
+        if not validate_cfg_names:
+            missing_cfg_names_msg = 'Missing config names in Pip Installer Gui Config file !'
+            missing_cfg_names_msg += '\n ABORTING ...'
+            raise PipValidationError(missing_cfg_names_msg)
 
         def generate_folder_tree_dict(path):
             folder_tree_dict = {'name': os.path.basename(path)}
@@ -496,20 +505,33 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         try:
 
-            assert conf_name in validate_cfg_names
+            if conf_name not in validate_cfg_names:
+                no_valid_conf_name_msg = f'Current selected configuration "{conf_name}" is not allowed !'
+                no_valid_conf_name_msg += f'\n Allowed configurations: {validate_cfg_names}'
+                no_valid_conf_name_msg += '\n ABORTING ...'
+                raise PipValidationError(no_valid_conf_name_msg)
 
-            validator_tree_file_path = os.path.join(conf_path, f'{conf_path}/{conf_name}_tree_validator')
-            config_folder_dict = generate_folder_tree_dict(conf_path)
+            validator_tree_file_path = os.path.join(
+                conf_path, f'{conf_path}/{conf_name}_tree_validator.json')
+            config_folder_tree_dict = generate_folder_tree_dict(conf_path)
 
             with open(validator_tree_file_path) as f:
                 validator_tree_dict = json.load(f)
-                diff_dict = DeepDiff(validator_tree_dict, config_folder_dict, ignore_order=True)
-                logging.info(f'diff_dict >>>> {diff_dict}')
-                assert not diff_dict
+                diff_dict = DeepDiff(validator_tree_dict, config_folder_tree_dict, ignore_order=True)
+                logging.info(f'Config tree files diff >>>> {diff_dict}')
+                if not diff_dict:
+                    cfg_validated = False
 
+        except FileNotFoundError as fexcp:
+            no_tree_json_file_found_msg = f'File "{conf_name}_tree_validator.json" not found ! Validation failed !'
+            no_tree_json_file_found_msg += '\n ABORTING ...'
+            raise PipValidationError(no_tree_json_file_found_msg) from e
         except Exception as excpt:
-            cfg_validated = False
-            logging.warning(excpt)
+            validation_config_excp_err = f'Impossible to verify the Configuration "{conf_name}"!'
+            validation_config_excp_err += ' Please read log file for more details.'
+            validation_config_excp_err += '\n ABORTING ...'
+            logging.error(traceback.format_exc())
+            raise PipValidationError(validation_config_excp_err) from excpt
 
         return cfg_validated
 
@@ -629,14 +651,16 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         try:
             validated_platform = await self.__validate_platform_alfa(ssh_conn)
-            assert_err_msg_platform = 'Invalid platform version! The current platform is not an "Alfa custom general-purpose platform" !'
-            assert_err_msg_platform += '\n\t Aborting config deploying!'
-            assert validated_platform, assert_err_msg_platform
+            if not validated_platform:
+                invalid_platform_msg = 'Invalid platform version! The current platform is not an "Alfa custom general-purpose platform" !'
+                invalid_platform_msg += '\n ABORTING ...'
+                raise PipValidationError(invalid_platform_msg)
 
             validated_config = await self.__validate_config(conf_name, cfg_folder_path)
-            assert_err_msg_cfg = f'Invalid Config Structure! The current Config "{conf_name}" is unsuitable!'
-            assert_err_msg_cfg += '\n\t Aborting config deploying!'
-            assert validated_config, assert_err_msg_cfg
+            if not validated_config:
+                invalid_configuration_msg = f'Invalid Config Structure! The current Config "{conf_name}" is unsuitable!'
+                invalid_configuration_msg += '\n ABORTING ...'
+                raise PipValidationError(invalid_configuration_msg)
 
             deploy_msg_start = f'Start to deploy conf "{conf_name}"'
             logging.warning(f'{deploy_msg_start}' + f' ({cfg_folder_path})')
@@ -688,9 +712,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
             self.main_window.update_gui_msg_board(f'Successfully uploaded conf "{conf_name}"!! [{cfg_folder_path}]')
 
-        except AssertionError as aerr:
-            logging.error(traceback.format_exc())
-            self.main_window.update_gui_msg_board(aerr)
+        except PipValidationError as val_err:
+            self.main_window.update_gui_msg_board(val_err)
         except Exception as e:  # pylint: disable=broad-except
             logging.error(traceback.format_exc())
             self.main_window.update_gui_msg_board(e)
@@ -729,11 +752,11 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         try:
             filename_cfg = fbs_ctx.get_resource(cfg_filename)
-            logging.warning('filename_cfg: {}'.format({filename_cfg}))
+            logging.info('filename_cfg: {}'.format({filename_cfg}))
             with open(filename_cfg, 'r') as f_alias:
                 json_data = json.loads(f_alias.read())
 
-            logging.warning('json_data: {}'.format(json_data))
+            logging.info('json_data: {}'.format(json_data))
             CACHE.update(json_data)
 
             remote_keys = ('conf_remote_path', 'remote_supervisor_conf_path', 'remote_autostart_path')
@@ -746,7 +769,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         except FileNotFoundError:
             file_not_found = '{} not FOUND!'.format(cfg_filename)
-            logging.warning(file_not_found)
+            logging.error(file_not_found)
 
     @staticmethod
     def __validation_wheel_venv(app_names, venv_name, whl_path):
