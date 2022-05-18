@@ -519,13 +519,13 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                 validator_tree_dict = json.load(f)
                 diff_dict = DeepDiff(validator_tree_dict, config_folder_tree_dict, ignore_order=True)
                 logging.info(f'Config tree files diff >>>> {diff_dict}')
-                if not diff_dict:
+                if diff_dict:
                     cfg_validated = False
 
         except FileNotFoundError as fexcp:
             no_tree_json_file_found_msg = f'File "{conf_name}_tree_validator.json" not found ! Validation failed !'
             no_tree_json_file_found_msg += '\n ABORTING ...'
-            raise PipValidationError(no_tree_json_file_found_msg) from e
+            raise PipValidationError(no_tree_json_file_found_msg) from fexcp
         except Exception as excpt:
             validation_config_excp_err = f'Impossible to verify the Configuration "{conf_name}"!'
             validation_config_excp_err += ' Please read log file for more details.'
@@ -673,7 +673,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             autostart_cmd_pt1 = 'grep -q "@/usr/bin/chromium" /home/admin/.config/lxsession/LXDE/autostart'
             autostart_cmd_pt2 = f'&& (sed -i "/chromium --disable-restore-session-state --no-first-run --kiosk/d" {autostart_remote_path})'
             if 'alfalib' in conf_name:
-                autostart_cmd_pt2 = f'|| (echo "@/usr/bin/chromium --disable-restore-session-state --no-first-run --kiosk 127.0.0.1" | sudo tee -a {autostart_remote_path})'
+                autostart_cmd_pt2 = '|| (echo "@/usr/bin/chromium --disable-restore-session-state --no-first-run --kiosk 127.0.0.1"'
+                autostart_cmd_pt2 += f' | sudo tee -a {autostart_remote_path})'
 
             cmds_ = [
                 f'rm -rf {conf_remote_path}/custom_css/',
@@ -721,7 +722,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             failed_msg = f'Deploy CONFIG {conf_name} on target FAILED !!'
             failed_msg += '\n\t THE ALFA SOFTWARE MAY STOP WORKING PROPERLY !'
             self.main_window.update_gui_msg_board(failed_msg)
-        
+
         if close_ssh:
             ssh_conn.close()
             logging.warning(f'closed ssh_conn ({ssh_conn})')
@@ -798,7 +799,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         ping_counter = '-n 1'
         if sys.platform == "linux" or sys.platform == "linux2":
-            ping_counter = '-c 1'            
+            ping_counter = '-c 1'
 
         try:
             cmd_ = f"ping {ping_counter} -w 1000 {ip_to_validate}"
