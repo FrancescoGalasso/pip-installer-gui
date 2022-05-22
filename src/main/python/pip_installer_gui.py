@@ -452,9 +452,10 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             with ssh_client.open_sftp() as sftp_client:
                 with sftp_client.open('/etc/lsb-release') as remote_file:
                     for line in remote_file:
-                        (key, value) = line.split('=')
-                        value = value.strip('\"\n')
-                        lsb_release[key] = value
+                        if line and line.rstrip():
+                            (key, value) = line.split('=')
+                            value = value.strip('\"\n')
+                            lsb_release[key] = value
 
             logging.debug(lsb_release)
             validated = 'general-purpose' in lsb_release.get('DISTRIB_DESCRIPTION', None)
@@ -517,6 +518,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
             with open(validator_tree_file_path) as f:
                 validator_tree_dict = json.load(f)
+                logging.debug(f'Config tree: {config_folder_tree_dict}')
+                logging.debug(f'Validator file tree: {validator_tree_dict}')
                 diff_dict = DeepDiff(validator_tree_dict, config_folder_tree_dict, ignore_order=True)
                 logging.info(f'Config tree files diff >>>> {diff_dict}')
                 if diff_dict:
