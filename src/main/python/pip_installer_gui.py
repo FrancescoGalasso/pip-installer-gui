@@ -92,7 +92,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
                 logging.warning('Start the wheel installation to remote machine')
                 wheel_path = self.qline_folder_path.text()
                 selected_venv = self.comboBox_venvs.currentText()
-                app_names_list = CACHE.get('app_names')
+                app_names_list = CACHE.get('app_names', [])
                 self.setup_or_update_btn_ui('start_install')
                 ignore_requires = map_str_to_bool.get(self.comboBox_requires.currentText())
                 deploy_user_choose = map_str_to_bool.get(self.comboBox_config_files.currentText())
@@ -705,13 +705,13 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                 invalid_configuration_msg += '\n ABORTING ...'
                 raise PipValidationError(invalid_configuration_msg)
 
-            deploy_msg_start = f'Start to deploy conf "{conf_name}"'
-            logging.warning(f'{deploy_msg_start}' + f' ({cfg_folder_path})')
-            self.main_window.update_gui_msg_board(deploy_msg_start)
+            conf_remote_path = CACHE.get("remote_conf_path", "")
+            autostart_remote_path = CACHE.get("remote_autostart_path", "")
+            supervisor_conf_remote_path = CACHE.get("remote_supervisor_conf_path", "")
 
-            conf_remote_path = CACHE.get('remote_conf_path')
-            autostart_remote_path = CACHE.get("remote_autostart_path")
-            supervisor_conf_remote_path = CACHE.get("remote_supervisor_conf_path")
+            assert conf_remote_path
+            assert autostart_remote_path
+            assert supervisor_conf_remote_path
 
             chromium_browser = await self.__get_installed_chromium_browser_debian_pkg(ssh_conn)
             autostart_cmd_pt1 = f'grep -q "@/usr/bin/{chromium_browser}" /home/admin/.config/lxsession/LXDE/autostart'
@@ -719,6 +719,10 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             if 'alfalib' in conf_name:
                 autostart_cmd_pt2 = f'|| (echo "@/usr/bin/{chromium_browser} --disable-restore-session-state --no-first-run --kiosk 127.0.0.1"'
                 autostart_cmd_pt2 += f' | sudo tee -a {autostart_remote_path})'
+
+            deploy_msg_start = f'Start to deploy conf "{conf_name}"'
+            logging.warning(f'{deploy_msg_start}' + f' ({cfg_folder_path})')
+            self.main_window.update_gui_msg_board(deploy_msg_start)
 
             cmds_ = [
                 f'rm -rf {conf_remote_path}/custom_css/',
@@ -815,6 +819,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         except FileNotFoundError:
             file_not_found = '{} not FOUND!'.format(cfg_filename)
             logging.error(file_not_found)
+        except Exception:   # pylint: disable=broad-except
+            logging.error(traceback.format_exc())
 
     @staticmethod
     def __validation_wheel_venv(app_names, venv_name, whl_path):
