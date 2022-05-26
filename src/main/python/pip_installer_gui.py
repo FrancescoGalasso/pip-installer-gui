@@ -414,7 +414,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         if print_to_gui:
             self.main_window.update_gui_msg_board(copied_msg)
 
-    async def __async_paramiko_exec_commands(self, ssh_conn, cmd_list, timeout=.5):
+    async def __async_paramiko_exec_commands(self, ssh_conn, cmd_list, timeout=.5, print_to_gui=True):
 
         if ssh_conn.get_transport() is None:
             raise_msg = f"SSH CONNECTION TRANSPORT not founded! Failed to execute cmds {cmd_list}"
@@ -424,20 +424,28 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             raise_msg = f"SSH CONNECTION TRANSPORT is not active! Failed to execute cmds {cmd_list}"
             raise RuntimeError(raise_msg)
 
+        stdouts = []
+        stderrs = []
         for command in cmd_list:
             logging.info(f'Executing: {command}')
             _, stdout, stderr = ssh_conn.exec_command(command)
             for line in stdout.readlines():
                 _line = line.rstrip()
                 logging.info(_line)
-                self.main_window.update_gui_msg_board(_line)
+                stdouts.append(_line)
+                if print_to_gui:
+                    self.main_window.update_gui_msg_board(_line)
             if stderr and stderr.read().decode() != '':
                 ssh_errors = '{}'.format(stderr.read().decode())
                 if ssh_errors:
                     logging.error('Errors: {}'.format(ssh_errors))
-                    self.main_window.update_gui_msg_board(ssh_errors)
+                    stderrs.append(ssh_errors)
+                    if print_to_gui:
+                        self.main_window.update_gui_msg_board(ssh_errors)
 
             await asyncio.sleep(timeout)
+
+        return (stdouts, stderrs)
 
     async def __validate_platform_alfa(self, ssh_client):
         """
@@ -478,7 +486,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         Config folder name must be check (we do not want to remote copy
         files from a wrong folder or from a subfolder inside the Config folder)
 
-        We then compare the tree json file (produced using the Linux command
+        We then compare the tree json file (adapted from the Linux command
         'tree -J <folder conf>') with the same structure generated
         at runtime from the path provided to check the validity of
         the configuration.
@@ -537,6 +545,38 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             raise PipValidationError(validation_config_excp_err) from excpt
 
         return cfg_validated
+
+    async def __get_installed_chromium_browser_debian_pkg(self, ssh_conn):
+        """
+        On BPi it is installed the pkg "chromium"
+        On RBPi usually it is installed the pkg "chromium"
+        On RBPi general-purpose platform it is installed the pkg "chromium-browser" to fix
+        an issue on AlfaTint (legacy software)
+
+        # RBPi uname -a -> Linux raspberrypi 5.10.63-v7l+ #1459 SMP Wed Oct 6 16:41:57 BST 2021 armv7l GNU/Linux
+        # BPi uname -a -> Linux bananapi 4.9.241-BPI-M5 #2 SMP PREEMPT Mon Jun 21 16:29:40 HKT 2021 aarch64 GNU/Linux
+
+        """
+
+        browser_cmd = [
+            '[[ -f /usr/bin/chromium-browser ]] && echo "chromium-browser founded!"']
+        std_outs, std_errs = await self.__async_paramiko_exec_commands(
+            ssh_conn=ssh_conn,
+            cmd_list=browser_cmd,
+            print_to_gui=False)
+
+        logging.debug(f'std_outs >> {std_outs}')
+        logging.debug(f'std_errs >> {std_errs}')
+
+        assert not std_errs
+
+        installed_browser = 'chromium'
+        if len(std_outs) > 0 and any('chromium-browser' in out for out in std_outs):
+            installed_browser = 'chromium-browser'
+
+        logging.debug(f'installed_browser >> {installed_browser}')
+
+        return installed_browser
 
     async def __async_upload_multiple_files(
             self,
@@ -673,10 +713,11 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             autostart_remote_path = CACHE.get("remote_autostart_path")
             supervisor_conf_remote_path = CACHE.get("remote_supervisor_conf_path")
 
-            autostart_cmd_pt1 = 'grep -q "@/usr/bin/chromium" /home/admin/.config/lxsession/LXDE/autostart'
-            autostart_cmd_pt2 = f'&& (sed -i "/chromium --disable-restore-session-state --no-first-run --kiosk/d" {autostart_remote_path})'
+            chromium_browser = await self.__get_installed_chromium_browser_debian_pkg(ssh_conn)
+            autostart_cmd_pt1 = f'grep -q "@/usr/bin/{chromium_browser}" /home/admin/.config/lxsession/LXDE/autostart'
+            autostart_cmd_pt2 = f'&& (sed -i "/{chromium_browser} --disable-restore-session-state --no-first-run --kiosk/d" {autostart_remote_path})'
             if 'alfalib' in conf_name:
-                autostart_cmd_pt2 = '|| (echo "@/usr/bin/chromium --disable-restore-session-state --no-first-run --kiosk 127.0.0.1"'
+                autostart_cmd_pt2 = f'|| (echo "@/usr/bin/{chromium_browser} --disable-restore-session-state --no-first-run --kiosk 127.0.0.1"'
                 autostart_cmd_pt2 += f' | sudo tee -a {autostart_remote_path})'
 
             cmds_ = [
