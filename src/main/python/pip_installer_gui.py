@@ -46,7 +46,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         super(MainWindow, self).__init__()  # pylint: disable=super-with-arguments
         self.ctx = ctx
         self.parent = parent
-        self.has_config = False
+        self.has_valid_config = False
         self.ui_path = self.ctx.get_resource('main_window.ui')
         uic.loadUi(self.ui_path, self)
 
@@ -57,7 +57,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         self.pushButton_clear.clicked.connect(self.on_btn_clear_clicked)
         self.pushButton_choose_conf.clicked.connect(self.__get_conf_file_dir)
 
-        self.qline_ip.textChanged.connect(self.on_text_changed)
+        self.qline_ip.textChanged.connect(self.on_ip_text_changed)
 
         self.comboBox_config_files.activated.connect(self.handle_pushButton_choose_conf)
 
@@ -85,29 +85,29 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             }
             path_pem_file = self.ctx.get_resource(PEM_FILE)
             ip_machine = self.qline_ip.text()
-            if self.qline_folder_path.text() == '':
-                no_whl_msg = 'Please select a wheel file!'
-                self.update_gui_msg_board(no_whl_msg)
-            else:
-                logging.warning('Start the wheel installation to remote machine')
-                wheel_path = self.qline_folder_path.text()
-                selected_venv = self.comboBox_venvs.currentText()
-                app_names_list = CACHE.get('app_names', [])
-                self.setup_or_update_btn_ui('start_install')
-                ignore_requires = map_str_to_bool.get(self.comboBox_requires.currentText())
-                deploy_user_choose = map_str_to_bool.get(self.comboBox_config_files.currentText())
-                self.parent.install_and_deploy_on_target(
-                    path_pem_file,
-                    ip_machine,
-                    wheel_path,
-                    selected_venv,
-                    app_names_list,
-                    ignore_requires,
-                    deploy_user_choose)
+            wheel_path = self.qline_folder_path.text()
+            if wheel_path == '':
+                raise RuntimeError('Please select a wheel file!')
+
+            logging.warning('Start the wheel installation to remote machine')
+            selected_venv = self.comboBox_venvs.currentText()
+            app_names_list = CACHE.get('app_names', [])
+            self.setup_or_update_btn_ui('start_install')
+            ignore_requires = map_str_to_bool.get(self.comboBox_requires.currentText())
+            deploy_user_choose = map_str_to_bool.get(self.comboBox_config_files.currentText())
+            self.parent.install_and_deploy_on_target(
+                path_pem_file,
+                ip_machine,
+                wheel_path,
+                selected_venv,
+                app_names_list,
+                ignore_requires,
+                deploy_user_choose)
 
         except FileNotFoundError:
             self.update_gui_msg_board('PEM File NOT found! Please contact IT support')
         except Exception as excp: # pylint: disable=broad-except
+            logging.error(traceback.format_exc())
             self.update_gui_msg_board(excp)
 
     def on_btn_deploy_clicked(self):
@@ -132,8 +132,8 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         except Exception as excp: # pylint: disable=broad-except
             self.update_gui_msg_board(excp)
 
-    def on_text_changed(self):
-        if self.has_config:
+    def on_ip_text_changed(self):
+        if self.has_valid_config:
             self.pushButton_validate.setEnabled(bool(self.qline_ip.text()))
         else:
             self.pushButton_validate.setEnabled(False)
@@ -162,7 +162,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             messag = f'[{formatted_date}] {messag}'
         if pretty_print:
             messag = f'\n{messag}\n'
-        logging.warning(f'messag >> {messag}')
+        logging.debug(f'messag >> {messag}')
 
         self.textBrowser_board.moveCursor(QTextCursor.End)
         self.textBrowser_board.ensureCursorVisible()
@@ -245,20 +245,25 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         app_version = self.ctx.build_settings.get('version')
         self.version_lbl.setText(app_version)
         self.setup_or_update_btn_ui('init_or_clear')
-        # self.textBrowser_board.ensureCursorVisible()
-        if CACHE:
-            self.has_config = True
-            config_venvs = CACHE.get('venvs')
-            for _venv in config_venvs:
-                self.comboBox_venvs.addItem(_venv, config_venvs[_venv])
-        else:
-            self.update_gui_msg_board('CONFIG file NOT found!')
 
         for option in ['yes', 'no']:
             self.comboBox_requires.addItem(option, option)
 
         for option in ['no', 'yes']:
             self.comboBox_config_files.addItem(option, option)
+
+        try:
+            if not CACHE:
+                raise RuntimeError('CONFIG file NOT found!')
+
+            self.parent.validate_configuration(CACHE)
+            self.has_valid_config = True
+            config_venvs = CACHE.get('venvs')
+            for _venv in config_venvs:
+                self.comboBox_venvs.addItem(_venv, config_venvs[_venv])
+        except Exception as exc:    # pylint: disable=broad-except
+            logging.error(traceback.format_exc())
+            self.update_gui_msg_board(exc)
 
 
 class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-instance-attributes
@@ -271,7 +276,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         self.fbs_ctx = fbs_ctx
         self.__setup_logger(self.fbs_ctx)
         logging.warning('**** Starting Pip Installer Gui Application ****')
-        self.__get_config(self.fbs_ctx)
+        self.__load_config_from_file(self.fbs_ctx)
         # Instantiating MainWindow passed as 'main_windows_class'
         self.main_window = main_window_class(self.fbs_ctx, self)
 
@@ -299,22 +304,22 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         logging.info(f'result of validation > {validation_result}')
 
         if validation_result.get('result') == 'ko' and validation_result.get('error'):
-            self.main_window.update_gui_msg_board(validation_result.get('error'))
+            validation_wheel_err_msg = validation_result.get('error')
             self.main_window.setup_or_update_btn_ui('validated')
-        else:
+            raise PipValidationError(validation_wheel_err_msg)
 
-            ssh_conn = self.create_ssh_connection_to_server(machine_ip, path_pem_file)
+        ssh_conn = self.create_ssh_connection_to_server(machine_ip, path_pem_file)
 
-            asyncio.ensure_future(
-                self.__async_install_and_deploy_on_target(
-                    ssh_conn,
-                    wheel_path,
-                    venv_path,
-                    tmp_remote_path,
-                    selected_venv_name,
-                    ignore_requires,
-                    deploy_choose)
-            )
+        asyncio.ensure_future(
+            self.__async_install_and_deploy_on_target(
+                ssh_conn,
+                wheel_path,
+                venv_path,
+                tmp_remote_path,
+                selected_venv_name,
+                ignore_requires,
+                deploy_choose)
+        )
 
     def deploy_on_target(
             self,
@@ -797,15 +802,15 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         logging.config.fileConfig(path_pig_log_cfg)
 
     @staticmethod
-    def __get_config(fbs_ctx, cfg_filename=CFG_FILE_NAME):
+    def __load_config_from_file(fbs_ctx, cfg_filename=CFG_FILE_NAME):
 
         try:
             filename_cfg = fbs_ctx.get_resource(cfg_filename)
-            logging.info('filename_cfg: {}'.format({filename_cfg}))
+            logging.info('Config file: {}'.format({filename_cfg}))
             with open(filename_cfg, 'r') as f_alias:
                 json_data = json.loads(f_alias.read())
 
-            logging.info('json_data: {}'.format(json_data))
+            logging.info('Config file data: {}'.format(json_data))
             CACHE.update(json_data)
 
             remote_keys = ('conf_remote_path', 'remote_supervisor_conf_path', 'remote_autostart_path')
@@ -839,6 +844,24 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                 _validation.update({'result': 'ok', 'error': None})
 
         return _validation
+
+    @staticmethod
+    def validate_configuration(config):
+
+        cfg_keys = ['venvs', 'tmp_dir', 'app_names']
+        check_cfg_keys = cfg_keys.copy()
+        counter = 0
+        for k_ in config:
+            if k_ in check_cfg_keys:
+                counter += 1
+                check_cfg_keys.remove(k_)
+
+        if check_cfg_keys and len(cfg_keys) != counter:
+            raise RuntimeError(f'Missing Config key(s) {check_cfg_keys} ! Invalid Configuration.')
+
+        for k_ in cfg_keys:
+            if not config.get(k_):
+                raise ValueError(f'Empty Config key "{k_}"! Invalid Configuration.')
 
     @staticmethod
     def validate_ip_machine(ip_to_validate):
