@@ -486,7 +486,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         return validated
 
-    async def __validate_config(self, conf_name, conf_path):
+    async def __validate_config(self, conf_name, conf_path, ssh_conn):
         """
         Config folder name must be check (we do not want to remote copy
         files from a wrong folder or from a subfolder inside the Config folder)
@@ -529,6 +529,14 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                 conf_path, f'{conf_path}/{conf_name}_tree_validator.json')
             config_folder_tree_dict = generate_folder_tree_dict(conf_path)
 
+            platform = await self.__get_platform_type(ssh_conn)
+            if any(x in conf_name for x in ['CR6_485', 'CR4_485']):
+                if not platform in conf_name:
+                    invalid_platform_msg = f'Current selected configuration "{conf_name}" is not compatible with '
+                    invalid_platform_msg += f'the current platform "{platform}" !'
+                    invalid_platform_msg += '\n ABORTING ...'
+                    raise PipValidationError(invalid_platform_msg)
+
             with open(validator_tree_file_path) as f:
                 validator_tree_dict = json.load(f)
                 logging.debug(f'Config tree: {config_folder_tree_dict}')
@@ -543,11 +551,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             no_tree_json_file_found_msg += '\n ABORTING ...'
             raise PipValidationError(no_tree_json_file_found_msg) from fexcp
         except Exception as excpt:
-            validation_config_excp_err = f'Impossible to verify the Configuration "{conf_name}"!'
-            validation_config_excp_err += ' Please read log file for more details.'
-            validation_config_excp_err += '\n ABORTING ...'
             logging.error(traceback.format_exc())
-            raise PipValidationError(validation_config_excp_err) from excpt
+            raise PipValidationError(excpt)
 
         return cfg_validated
 
@@ -582,6 +587,34 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         logging.debug(f'installed_browser >> {installed_browser}')
 
         return installed_browser
+
+    async def __get_platform_type(self, ssh_conn):
+        """
+        # RBPi uname -a -> Linux raspberrypi 5.10.63-v7l+ #1459 SMP Wed Oct 6 16:41:57 BST 2021 armv7l GNU/Linux
+        # BPi uname -a -> Linux bananapi 4.9.241-BPI-M5 #2 SMP PREEMPT Mon Jun 21 16:29:40 HKT 2021 aarch64 GNU/Linux
+
+        """
+
+        std_outs, std_errs = await self.__async_paramiko_exec_commands(
+            ssh_conn=ssh_conn,
+            cmd_list=['uname -a'],
+            print_to_gui=False)
+
+        logging.debug(f'std_outs >> {std_outs}')
+        logging.debug(f'std_errs >> {std_errs}')
+
+        assert not std_errs
+        assert std_outs
+
+        current_platform = None
+        if 'bananapi' in std_outs[0]:
+            current_platform = 'Bananapi'
+        if 'raspberrypi' in std_outs[0]:
+            current_platform = 'RBPi'
+
+        logging.debug(f'current_platform >> {current_platform}')
+
+        return current_platform
 
     async def __async_upload_multiple_files(
             self,
@@ -704,11 +737,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                 invalid_platform_msg += '\n ABORTING ...'
                 raise PipValidationError(invalid_platform_msg)
 
-            validated_config = await self.__validate_config(conf_name, cfg_folder_path)
-            if not validated_config:
-                invalid_configuration_msg = f'Invalid Config Structure! The current Config "{conf_name}" is unsuitable!'
-                invalid_configuration_msg += '\n ABORTING ...'
-                raise PipValidationError(invalid_configuration_msg)
+            await self.__validate_config(conf_name, cfg_folder_path, ssh_conn)
 
             conf_remote_path = CACHE.get("remote_conf_path", "")
             autostart_remote_path = CACHE.get("remote_autostart_path", "")
@@ -771,10 +800,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         except Exception as e:  # pylint: disable=broad-except
             logging.error(traceback.format_exc())
             self.main_window.update_gui_msg_board(e)
-            self.main_window.update_gui_msg_board('\t More details on log files')
-            failed_msg = f'Deploy CONFIG {conf_name} on target FAILED !!'
-            failed_msg += '\n\t THE ALFA SOFTWARE MAY STOP WORKING PROPERLY !'
-            self.main_window.update_gui_msg_board(failed_msg)
+            self.main_window.update_gui_msg_board('More on logs')
 
         if close_ssh:
             ssh_conn.close()
