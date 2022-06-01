@@ -246,7 +246,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         self.version_lbl.setText(app_version)
         self.setup_or_update_btn_ui('init_or_clear')
 
-        for option in ['yes', 'no']:
+        for option in ['no', 'yes']:
             self.comboBox_requires.addItem(option, option)
 
         for option in ['no', 'yes']:
@@ -610,7 +610,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         if 'bananapi' in std_outs[0]:
             current_platform = 'Bananapi'
         if 'raspberrypi' in std_outs[0]:
-            current_platform = 'RBPi'
+            current_platform = 'RBpi'
 
         logging.debug(f'current_platform >> {current_platform}')
 
