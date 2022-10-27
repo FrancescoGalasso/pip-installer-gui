@@ -874,16 +874,14 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
     @staticmethod
     def validate_configuration(config):
 
-        cfg_keys = ['venvs', 'tmp_dir', 'app_names']
-        check_cfg_keys = cfg_keys.copy()
-        counter = 0
-        for k_ in config:
-            if k_ in check_cfg_keys:
-                counter += 1
-                check_cfg_keys.remove(k_)
-
-        if check_cfg_keys and len(cfg_keys) != counter:
-            raise RuntimeError(f'Missing Config key(s) {check_cfg_keys} ! Invalid Configuration.')
+        control_cfg_keys = ['venvs', 'tmp_dir', 'app_names', 'wheel_path',
+                            'conf_files_path', 'configurations', 
+                            'remote_autostart_path', 'remote_supervisor_conf_path',
+                            'remote_conf_path']
+        config_keys = list(config.keys())
+        diffs = set(control_cfg_keys) - set(config_keys)
+        if diffs:
+            raise RuntimeError(f'Missing Config key(s) {diffs} ! Invalid Configuration.')
 
         for k_ in cfg_keys:
             if not config.get(k_):
