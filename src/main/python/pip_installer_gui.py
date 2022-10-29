@@ -883,7 +883,9 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         if diffs:
             raise RuntimeError(f'Missing Config key(s) {diffs} ! Invalid Configuration.')
 
-        for k_ in cfg_keys:
+        for k_ in config_keys:
+            if k_ == 'wheel_path' or k_ == 'conf_files_path':
+                continue
             if not config.get(k_):
                 raise ValueError(f'Empty Config key "{k_}"! Invalid Configuration.')
 
