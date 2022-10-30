@@ -864,6 +864,9 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         _validation = {'result': 'ko',
                        'error': validation_err_msg}
 
+        # fix idiocracy about wheel name and app name
+        if 'rs485_master' in whl_name:
+            whl_name = 'rs485-master'
         for _app_name in app_names:
             logging.info(f'app name > {_app_name} | venv name > {venv_name} | wheel name > {whl_name}')
             if _app_name in venv_name and _app_name in whl_name:
