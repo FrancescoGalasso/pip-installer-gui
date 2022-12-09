@@ -22,6 +22,7 @@ import traceback
 import subprocess
 import glob
 import paramiko
+import configparser
 
 from pip_errors import PipValidationError
 from deepdiff import DeepDiff
@@ -31,11 +32,53 @@ from PyQt5.QtGui import QTextCursor
 from qasync import QEventLoop
 
 
-CFG_FILE_NAME = ''.join(['config', os.sep, 'pig.cfg'])
+CFG_FILE_NAME = ''.join(['config', os.sep, 'config.ini'])
 PEM_FILE = ''.join(['config', os.sep, 'keyy.pem'])
 PIG_LOG_CFG = ''.join(['config', os.sep, 'logger.cfg'])
 PIG_LOG_FILE = ''.join(['log', os.sep, 'PipInstallerGui.log'])
 CACHE = {}
+
+
+class Config:
+
+    def __init__(self, config_file):
+  
+        self.config_file = config_file       
+        self.config_dict = {}
+        self.config_sections = None
+        self.config_parser = None
+
+    def __repr__(self):
+        return f'Config(path={self.config_file})'
+
+    def __get_current_section_as_dict(self, section):
+        s_dict = {}
+        for key in self.config_parser[section]:  
+            s_dict.update({key: self.config_parser[section][key]})
+        return s_dict
+
+    def ini_to_dict(self):
+        self.config_parser = configparser.ConfigParser(allow_no_value=True)
+        self.config_parser.read(self.config_file, encoding='utf-8')
+
+        for s in self.config_parser.sections():
+
+            s_d = self.__get_current_section_as_dict(s)
+
+            if s == 'venvs' or s == 'tmp_dir':
+                self.config_dict.update({s: s_d})
+
+            if s == 'wheel_path' or s == 'conf_files_path':
+                if s_d:
+                    _path = list(s_d.values()).pop()
+
+                    self.config_dict.update({s: _path})
+
+            if s == 'configurations' or s == 'app_names':
+                s_list = list(s_d.keys())
+                self.config_dict.update({s: s_list})
+
+        return self.config_dict
 
 
 class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
@@ -590,8 +633,10 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
     async def __get_platform_type(self, ssh_conn):
         """
-        # RBPi uname -a -> Linux raspberrypi 5.10.63-v7l+ #1459 SMP Wed Oct 6 16:41:57 BST 2021 armv7l GNU/Linux
-        # BPi uname -a -> Linux bananapi 4.9.241-BPI-M5 #2 SMP PREEMPT Mon Jun 21 16:29:40 HKT 2021 aarch64 GNU/Linux
+        uname -a Alfa images
+        # RBPi -> Linux raspberrypi 5.10.63-v7l+ #1459 SMP Wed Oct 6 16:41:57 BST 2021 armv7l GNU/Linux
+        # BPi -> Linux bananapi 4.9.241-BPI-M5 #2 SMP PREEMPT Mon Jun 21 16:29:40 HKT 2021 aarch64 GNU/Linux
+        # BPi Armbian -> Linux bananapim5 5.10.51-meson64 #trunk SMP PREEMPT Tue Jul 20 00:56:03 CST 2021 aarch64 GNU/Linux
 
         """
 
@@ -833,11 +878,10 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         try:
             filename_cfg = fbs_ctx.get_resource(cfg_filename)
             logging.info('Config file: {}'.format({filename_cfg}))
-            with open(filename_cfg, 'r') as f_alias:
-                json_data = json.loads(f_alias.read())
-
-            logging.info('Config file data: {}'.format(json_data))
-            CACHE.update(json_data)
+            app_cfg = Config(filename_cfg)
+            config_dict = app_cfg.ini_to_dict()
+            logging.info('Config file data: {}'.format(config_dict))
+            CACHE.update(config_dict)
 
             remote_keys = ('conf_remote_path', 'remote_supervisor_conf_path', 'remote_autostart_path')
             if remote_keys not in CACHE:
