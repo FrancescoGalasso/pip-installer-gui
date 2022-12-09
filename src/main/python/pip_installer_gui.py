@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # pylint: disable=no-name-in-module
-# pylint: disable=logging-format-interpolation
-# pylint: disable=logging-fstring-interpolation
+# pylint: disable=logging-format-interpolation, logging-fstring-interpolation, consider-using-f-string
 # pylint: disable=missing-function-docstring
 # pylint: disable=too-many-locals
 # pylint: disable=too-many-arguments
@@ -21,15 +20,15 @@ import time
 import traceback
 import subprocess
 import glob
-import paramiko
 import configparser
+import paramiko                                                     # pylint: disable=import-error
 
 from pip_errors import PipValidationError
-from deepdiff import DeepDiff
+from deepdiff import DeepDiff                                       # pylint: disable=import-error
 from PyQt5 import uic
-from PyQt5.QtWidgets import QMainWindow, QApplication, QFileDialog
-from PyQt5.QtGui import QTextCursor
-from qasync import QEventLoop
+from PyQt5.QtWidgets import QMainWindow, QApplication, QFileDialog  # pylint: disable=import-error
+from PyQt5.QtGui import QTextCursor                                 # pylint: disable=import-error
+from qasync import QEventLoop                                       # pylint: disable=import-error
 
 
 CFG_FILE_NAME = ''.join(['config', os.sep, 'config.ini'])
@@ -42,8 +41,8 @@ CACHE = {}
 class Config:
 
     def __init__(self, config_file):
-  
-        self.config_file = config_file       
+
+        self.config_file = config_file
         self.config_dict = {}
         self.config_sections = None
         self.config_parser = None
@@ -53,7 +52,7 @@ class Config:
 
     def __get_current_section_as_dict(self, section):
         s_dict = {}
-        for key in self.config_parser[section]:  
+        for key in self.config_parser[section]:
             s_dict.update({key: self.config_parser[section][key]})
         return s_dict
 
@@ -922,7 +921,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
     def validate_configuration(config):
 
         control_cfg_keys = ['venvs', 'tmp_dir', 'app_names', 'wheel_path',
-                            'conf_files_path', 'configurations', 
+                            'conf_files_path', 'configurations',
                             'remote_autostart_path', 'remote_supervisor_conf_path',
                             'remote_conf_path']
         config_keys = list(config.keys())
