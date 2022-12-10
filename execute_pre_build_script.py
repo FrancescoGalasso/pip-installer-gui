@@ -1,5 +1,17 @@
 # -*- coding: utf-8 -*-
 
+# pylint: disable=missing-function-docstring
+# pylint: disable=missing-class-docstring
+
+"""
+Pre build script
+
+* Clear all logs created on develop machine
+* Restore the logger configuration file
+* Generate application configuration file starting from the current template
+* Get ready to distribuite the application
+"""
+
 import os
 import logging
 import traceback
@@ -79,11 +91,10 @@ class Prerelease:
         application_config.read(self.path_app_config_template, encoding='utf-8')
 
         if server_path_wheels and server_path_applications_confs:
-            # add them to app config and create config.ini
             application_config['wheel_path'] = server_path_wheels
             application_config['conf_files_path'] = server_path_applications_confs
 
-        with open(self.path_app_config, 'w') as configfile:
+        with open(self.path_app_config, 'w', encoding='utf-8') as configfile:
             application_config.write(configfile)
 
 
