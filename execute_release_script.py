@@ -18,6 +18,8 @@ import logging
 import traceback
 import configparser
 import subprocess
+import json
+import copy
 
 HERE = os.path.abspath(os.path.dirname(__file__))
 
@@ -29,10 +31,12 @@ class PipInstallerGuiReleaser:
         self.path_log_config = f'{os.sep}'.join([HERE, 'src', 'main', 'resources', 'base', 'config', 'logger.cfg'])
         self.path_app_config_template = f'{os.sep}'.join([HERE, 'src', 'main', 'resources', 'base', 'config', 'config.ini.template'])
         self.path_app_config = f'{os.sep}'.join([HERE, 'src', 'main', 'resources', 'base', 'config', 'config.ini'])
+        self.path_app_settings_json = f'{os.sep}'.join([HERE, 'src', 'build', 'settings', 'base.json'])
 
         self.NAME = 'Pip Installer Gui Releaser'
         self.DESCRIPTION = 'Generate the window installer for Pip Installer Gui'
         self.args = None
+        self.settings_fbs = None
 
     def run(self):
         """
@@ -61,9 +65,8 @@ class PipInstallerGuiReleaser:
             self.restore_pig_log()
             self.restore_logger_cfg_file()
             self.generate_app_config_from_template()
-            logging.warning('\n**** SUCCESSFULLY COMPLETED THE EXECUTION OF PRE BUILD SCRIPT ! ****')
-
             self.generate_windows_installer()
+
         except Exception:
             logging.error(traceback.format_exc())
 
@@ -131,24 +134,44 @@ class PipInstallerGuiReleaser:
             application_config.write(configfile)
             logging.warning('Created application config !')
 
-    @staticmethod
-    def generate_windows_installer():
+    def generate_windows_installer(self):
         """
         wrapper for fman build system commands
         see: https://github.com/mherrmann/fbs
         """
 
-        # modificare il file srb/build/settings/base.json per modificare il nome dell'eseguibile (Customer - Alfa Internal)
-        # subprocess.run("dir", shell=True, check=True) per fbs freeze & fbs run
+        installer_new_name = None
+        default_installer_name = None
+        with open(self.path_app_settings_json, 'r', encoding='utf-8') as settings_file:
+            file_contents = settings_file.read()
+            settings_json = json.loads(file_contents)
+            application_name = settings_json.get('app_name', 'PipInstallerGui')
+            default_installer_name = f'{application_name}Setup'
+            installer_new_name = f'Customer_{default_installer_name}'
+            if self.args.server_alfa_paths:
+                installer_new_name = f'Alfa_{DEFAULT_APP_NAME}'
 
         cmds = [
             f'cd {HERE}',
             f'{HERE}\\fbs_venv\\Scripts\\activate && fbs freeze',
             f'{HERE}\\fbs_venv\\Scripts\\activate && fbs installer'
         ]
-
         for cmd in cmds:
+            logging.warning(f'executing cmd: {cmd}')
             subprocess.run(cmd, shell=True, check=True)
+
+        path_installer = f'{os.sep}'.join([HERE, 'target', f'{default_installer_name}.exe'])
+        path_installer_renamed = f'{os.sep}'.join([HERE, 'target', f'{installer_new_name}.exe'])
+        logging.warning(f'path_installer -> {path_installer}')
+        logging.warning(f'path_installer_renamed -> {path_installer_renamed}')
+        try:
+            os.rename(path_installer, path_installer_renamed)
+            logging.warning(f'Renamed Installer file to "{installer_new_name}"')
+        except Exception as excp:
+            logging.error(excp)
+            os.remove(path_installer_renamed)
+            os.rename(path_installer, path_installer_renamed)
+            logging.warning(f'Forcing rename of Installer file to "{installer_new_name}"')  
 
 if __name__ == '__main__':
     PipInstallerGuiReleaser().run()
