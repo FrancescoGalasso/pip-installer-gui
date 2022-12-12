@@ -30,7 +30,7 @@ FunctionEnd
 ;--------------------------------
 ;General
 
-  Name "${app_name}"
+  Name "${app_name} v${version}"
   OutFile "..\${installer}"
 
 ;--------------------------------
@@ -41,7 +41,8 @@ FunctionEnd
 ;--------------------------------
 ;Pages
 
-  !define MUI_WELCOMEPAGE_TEXT "This wizard will guide you through the installation of ${app_name}.$\r$\n$\r$\n$\r$\nClick Next to continue."
+  !define MUI_WELCOMEPAGE_TEXT "This wizard will guide you through the installation of ${app_name} version ${version}.$\r$\n$\r$\n$\r$\nClick Next to continue."
+  !define MUI_WELCOMEPAGE_TITLE 'Welcome to ${app_name} version ${version} Setup'
   !insertmacro MUI_PAGE_WELCOME
   !insertmacro MUI_PAGE_DIRECTORY
   !insertmacro MUI_PAGE_INSTFILES
