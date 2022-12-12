@@ -2,6 +2,7 @@
 
 # pylint: disable=missing-function-docstring
 # pylint: disable=missing-class-docstring
+# pylint: disable=logging-fstring-interpolation
 
 """
 Pre build script
@@ -19,7 +20,6 @@ import traceback
 import configparser
 import subprocess
 import json
-import copy
 
 HERE = os.path.abspath(os.path.dirname(__file__))
 
@@ -67,7 +67,7 @@ class PipInstallerGuiReleaser:
             self.generate_app_config_from_template()
             self.generate_windows_installer()
 
-        except Exception:
+        except Exception:   # pylint: disable=broad-except
             logging.error(traceback.format_exc())
 
     def restore_pig_log(self):
@@ -128,7 +128,7 @@ class PipInstallerGuiReleaser:
                 logging.warning('Updated application config file with Alfa Server paths !')
 
         except AssertionError as a_err:
-            logging.warning(a_err)       
+            logging.warning(a_err)
 
         with open(self.path_app_config, 'w', encoding='utf-8') as configfile:
             application_config.write(configfile)
@@ -149,7 +149,7 @@ class PipInstallerGuiReleaser:
             default_installer_name = f'{application_name}Setup'
             installer_new_name = f'Customer_{default_installer_name}'
             if self.args.server_alfa_paths:
-                installer_new_name = f'Alfa_{DEFAULT_APP_NAME}'
+                installer_new_name = f'Alfa_{default_installer_name}'
 
         cmds = [
             f'cd {HERE}',
@@ -167,11 +167,11 @@ class PipInstallerGuiReleaser:
         try:
             os.rename(path_installer, path_installer_renamed)
             logging.warning(f'Renamed Installer file to "{installer_new_name}"')
-        except Exception as excp:
+        except Exception as excp:   # pylint: disable=broad-except
             logging.error(excp)
             os.remove(path_installer_renamed)
             os.rename(path_installer, path_installer_renamed)
-            logging.warning(f'Forcing rename of Installer file to "{installer_new_name}"')  
+            logging.warning(f'Forcing rename of Installer file to "{installer_new_name}"')
 
 if __name__ == '__main__':
     PipInstallerGuiReleaser().run()
