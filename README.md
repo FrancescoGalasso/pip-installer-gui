@@ -43,8 +43,17 @@ Using Windows it is possibile to convert a .ppk file to a .pem file using PuTTYg
 
 ## Release fbs application
 
-To release a new version it is necessary:
+To release a new version it is necessary to execute the Python script [execute_release_script](execute_release_script.py)
 
-1. execute the Python script [execute_pre_build_script](execute_pre_build_script.py)
-2. execute command `fbs freeze`
-3. execute command `fbs installer`
+```
+python execute_release_script.py --help
+usage: Pip Installer Gui Releaser [-h] [-s {True,False}]
+
+Generate the window installer for Pip Installer Gui
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -s {True,False}, --server-alfa {True,False}
+                        Setup Alfa server paths for wheels and application
+                        configurations
+```
