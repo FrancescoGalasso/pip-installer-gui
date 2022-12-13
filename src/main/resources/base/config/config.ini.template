@@ -19,8 +19,10 @@ alfa_CR6
 rs485-master
 
 [wheel_path]
+path = ""
 
 [conf_files_path]
+path = ""
 
 [configurations]
 RBpi_alfalib
