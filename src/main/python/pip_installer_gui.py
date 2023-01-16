@@ -910,6 +910,11 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         # fix idiocracy about wheel name and app name
         if 'rs485_master' in whl_name:
             whl_name = 'rs485-master'
+        # fix idiocracy n°2 about alfa_CR6 wheel name to avoid validation failure
+        # e.g. app_name=venv_name=alfa_cr6 & whl_name=alfa_CR6-0.0.1rc136-py3-none-any.whl
+        if 'alfa_CR6' in whl_name:
+            whl_name = whl_name.replace("alfa_CR6", "alfa_cr6")
+
         for _app_name in app_names:
             logging.info(f'app name > {_app_name} | venv name > {venv_name} | wheel name > {whl_name}')
             if _app_name in venv_name and _app_name in whl_name:
