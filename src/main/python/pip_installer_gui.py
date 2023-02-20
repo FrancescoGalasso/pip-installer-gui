@@ -501,7 +501,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         """
 
         validated = False
-        lsb_release = {}
+        self.lsb_release = {}
 
         try:
             with ssh_client.open_sftp() as sftp_client:
@@ -510,11 +510,11 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                         if line and line.rstrip():
                             (key, value) = line.split('=')
                             value = value.strip('\"\n')
-                            lsb_release[key] = value
+                            self.lsb_release[key] = value
 
-            logging.debug(lsb_release)
-            validated = 'general-purpose' in lsb_release.get('DISTRIB_DESCRIPTION', None)
-            validated = validated and lsb_release.get('PLATFORM_VERSION', None)
+            logging.debug(self.lsb_release)
+            validated = 'general-purpose' in self.lsb_release.get('DISTRIB_DESCRIPTION', None)
+            validated = validated and self.lsb_release.get('PLATFORM_VERSION', None)
 
         except IOError as e:
             no_lsbrelease_file_found_msg = 'File "lsb-release" not found ! Validation failed !'
@@ -791,11 +791,24 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             assert autostart_remote_path
             assert supervisor_conf_remote_path
 
+            armbian_so = False
+            logging.warning(f'self.lsb_release > {self.lsb_release}')
+            if 'Armbian' in self.lsb_release.get("DISTRIB_DESCRIPTION"):
+                logging.info('Armbian SO ;)')
+                armbian_so = True
+
             chromium_browser = await self.__get_installed_chromium_browser_debian_pkg(ssh_conn)
             autostart_cmd_pt1 = f'grep -q "@/usr/bin/{chromium_browser}" /home/admin/.config/lxsession/LXDE/autostart'
             autostart_cmd_pt2 = f'&& (sed -i "/{chromium_browser} --disable-restore-session-state --no-first-run --kiosk/d" {autostart_remote_path})'
+            
+            if armbian_so:
+                autostart_cmd_pt1 = f'grep -q "start_browser" /home/admin/.config/lxsession/LXDE/autostart'
+                autostart_cmd_pt2 = f'&& (sed -i "/start_browser/d" {autostart_remote_path})'
+           
             if 'alfalib' in conf_name:
                 autostart_cmd_pt2 = f'|| (echo "@/usr/bin/{chromium_browser} --disable-restore-session-state --no-first-run --kiosk 127.0.0.1"'
+                if armbian_so:
+                    autostart_cmd_pt2 = f'|| (echo "@/home/admin/start_browser.sh"'
                 autostart_cmd_pt2 += f' | sudo tee -a {autostart_remote_path})'
 
             deploy_msg_start = f'Start to deploy conf "{conf_name}"'
@@ -829,6 +842,11 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                 conf_remote_path)
 
             final_cmds = ['sudo /etc/init.d/lightdm restart']
+
+            if armbian_so and 'alfalib' in conf_name:
+                final_cmds.append("sleep 3; sudo ln -nsf /opt/alfa/conf/old_supervisor/alfa40.conf /opt/alfa/conf/supervisor/alfa40.conf; \
+                    sudo ln -nsf /opt/alfa/conf/old_supervisor/dispatcher.conf /etc/supervisor/conf.d/dispatcher.conf")
+
             if reload_supervisor:
                 final_cmds.append('sudo supervisorctl reload')
 

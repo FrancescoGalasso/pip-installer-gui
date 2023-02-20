@@ -30,3 +30,6 @@ RBpi_CR4_485
 RBpi_CR6_485
 Bananapi_CR6_485
 Bananapi_CR4_485
+Armbian_bpi_alfalib
+Armbian_bpi_CR6_485
+Armbian_bpi_CR4_485
