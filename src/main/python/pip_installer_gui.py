@@ -430,7 +430,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         logging.debug(f'rout: {rout}')
         logging.debug(f'rerr: {rerr}')
 
-        if not rout:
+        if not rout or any('Host Unreachable' in x for x in rout):
             raise RuntimeError('No Internet Connection (eth1 or WiFi) on Machine ... ABORT')
 
     async def __async_paramiko_sftp_put(self,
