@@ -418,6 +418,21 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         asyncio.set_event_loop(qt_event_loop)
         return qt_event_loop
 
+    async def __async_check_internet_availability(self, ssh_conn):
+        cmds_ = [
+            'ping -c 1 -w 1000 8.8.8.8'
+        ]
+        logging.warning(cmds_)
+        rout, rerr = await self.__async_paramiko_exec_commands(
+            ssh_conn=ssh_conn,
+            cmd_list=cmds_)
+
+        logging.debug(f'rout: {rout}')
+        logging.debug(f'rerr: {rerr}')
+
+        if not rout:
+            raise RuntimeError('No Internet Connection (eth1 or WiFi) on Machine ... ABORT')
+
     async def __async_paramiko_sftp_put(self,
                                         ssh_conn,
                                         local_path,
@@ -721,6 +736,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             deploy_choose):
 
         try:
+            await self.__async_check_internet_availability(ssh_conn)
+
             logging.warning("copying wheel file")
             whl_filename = os.path.basename(wheel_path)
             _tmp_remote_path = ''.join([tmp_remote_path, '/', whl_filename])
@@ -761,8 +778,10 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                 ssh_conn=ssh_conn,
                 cmd_list=['sudo supervisorctl reload'])
 
-        except Exception:   # pylint: disable=broad-except
+        except Exception as e:  # pylint: disable=broad-except
             logging.error(traceback.format_exc())
+            self.main_window.update_gui_msg_board(e)
+            self.main_window.update_gui_msg_board('More on logs')
 
         if ssh_conn.get_transport() is not None and ssh_conn.get_transport().is_active():
             logging.warning(f'ssh_conn active: {ssh_conn.get_transport().is_active()}')
@@ -775,6 +794,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         conf_name = os.path.basename(cfg_folder_path)
 
         try:
+            await self.__async_check_internet_availability(ssh_conn)
+
             validated_platform = await self.__validate_platform_alfa(ssh_conn)
             if not validated_platform:
                 invalid_platform_msg = 'Invalid platform version! The current platform is not an "Alfa custom general-purpose platform" !'
