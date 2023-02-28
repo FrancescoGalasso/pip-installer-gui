@@ -57,3 +57,34 @@ optional arguments:
                         Setup Alfa server paths for wheels and application
                         configurations
 ```
+
+```
+(fbs_venv) C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui>python execute_release_script.py -s True
+server_alfa_paths -> True
+['wheel_path', 'conf_files_path']
+WARNING:root:Updated application config file with Alfa Server paths !
+WARNING:root:Created application config !
+WARNING:root:executing cmd: cd C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui
+WARNING:root:executing cmd: C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui\fbs_venv\Scripts\activate && fbs freeze
+Done. You can now run `target\PipInstallerGui\PipInstallerGui.exe`. If
+that doesn't work, see https://build-system.fman.io/troubleshooting.
+WARNING:root:executing cmd: C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui\fbs_venv\Scripts\activate && fbs installer
+Created target\PipInstallerGuiSetup.exe.
+WARNING:root:path_installer -> C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui\target\PipInstallerGuiSetup.exe
+WARNING:root:path_installer_renamed -> C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui\target\Alfa_PipInstallerGuiSetup.exe
+WARNING:root:Renamed Installer file to "Alfa_PipInstallerGuiSetup"
+
+(fbs_venv) C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui>python execute_release_script.py
+server_alfa_paths -> False
+WARNING:root:Skip using Alfa Server paths for Pip Installer Gui
+WARNING:root:Created application config !
+WARNING:root:executing cmd: cd C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui
+WARNING:root:executing cmd: C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui\fbs_venv\Scripts\activate && fbs freeze
+Done. You can now run `target\PipInstallerGui\PipInstallerGui.exe`. If
+that doesn't work, see https://build-system.fman.io/troubleshooting.
+WARNING:root:executing cmd: C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui\fbs_venv\Scripts\activate && fbs installer
+Created target\PipInstallerGuiSetup.exe.
+WARNING:root:path_installer -> C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui\target\PipInstallerGuiSetup.exe
+WARNING:root:path_installer_renamed -> C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui\target\Customer_PipInstallerGuiSetup.exe
+WARNING:root:Renamed Installer file to "Customer_PipInstallerGuiSetup"
+```
