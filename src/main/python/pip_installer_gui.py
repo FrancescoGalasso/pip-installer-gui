@@ -35,6 +35,7 @@ CFG_FILE_NAME = ''.join(['config', os.sep, 'config.ini'])
 PEM_FILE = ''.join(['config', os.sep, 'keyy.pem'])
 PIG_LOG_CFG = ''.join(['config', os.sep, 'logger.cfg'])
 PIG_LOG_FILE = ''.join(['log', os.sep, 'PipInstallerGui.log'])
+PIG_MANIFEST_FILE = ''.join(['manifest', os.sep, 'manifest.json'])
 CACHE = {}
 
 
@@ -98,6 +99,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         self.pushButton_deploy.clicked.connect(self.on_btn_deploy_clicked)
         self.pushButton_clear.clicked.connect(self.on_btn_clear_clicked)
         self.pushButton_choose_conf.clicked.connect(self.__get_conf_file_dir)
+        self.pushButton_fix_platform.clicked.connect(self.on_btn_fix_platform_clicked)
 
         self.qline_ip.textChanged.connect(self.on_ip_text_changed)
 
@@ -171,6 +173,15 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
 
         except FileNotFoundError:
             self.update_gui_msg_board('PEM File NOT found! Please contact IT support')
+        except Exception as excp: # pylint: disable=broad-except
+            self.update_gui_msg_board(excp)
+
+    def on_btn_fix_platform_clicked(self):
+        try:
+            path_pem_file = self.ctx.get_resource(PEM_FILE)
+            ip_machine = self.qline_ip.text()
+            self.parent.apply_fix_on_target(path_pem_file, ip_machine)
+
         except Exception as excp: # pylint: disable=broad-except
             self.update_gui_msg_board(excp)
 
@@ -326,6 +337,14 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         self.__async_qt_event_loop = self.__init_async_event_loop()
         self.run_forever()
 
+    def apply_fix_on_target(self, path_pem_file, machine_ip):
+        
+        ssh_conn = self.create_ssh_connection_to_server(machine_ip, path_pem_file)
+
+        asyncio.ensure_future(
+            self.__async_apply_fix_on_target(ssh_conn)
+        )
+
     def install_and_deploy_on_target(self,
                                      path_pem_file,
                                      machine_ip,
@@ -417,6 +436,74 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         qt_event_loop = QEventLoop(self)
         asyncio.set_event_loop(qt_event_loop)
         return qt_event_loop
+
+    async def __async_apply_fix_on_target(self, ssh_conn, show_info_to_gui=True):
+
+        try:
+            # tricky way to assigning a value to the self.lsb_release attribute
+            await self.__validate_platform_alfa(ssh_conn)
+            logging.info(self.lsb_release)
+
+            target_plat_name = self.lsb_release.get('DISTRIB_DESCRIPTION')
+            target_plat_ver = self.lsb_release.get('PLATFORM_VERSION', '5')
+
+            if not target_plat_name:
+                raise RuntimeError('Missing DISTRIB_DESCRIPTION in file /etc/lsb-release ... Aborting')
+
+            path_manifest_file = self.fbs_ctx.get_resource(PIG_MANIFEST_FILE)
+            manifest = {}
+
+            with open(path_manifest_file, 'r') as manifest_file:
+                manifest = json.load(manifest_file)
+                if manifest:
+                    manifest = manifest.pop('platforms')
+
+            platform_fixed = False
+            platform_fixed_excp = False
+            # the BPi-M5 Armbian platform was released with VERSION=5
+            if target_plat_name == 'Armbian Alfa general-purpose BPi-M5':
+                bananapim5_manifest = manifest.get('bananapi', {})
+                logging.debug(bananapim5_manifest)
+
+                for v in bananapim5_manifest:
+                    if target_plat_ver in v:
+                        fixes = bananapim5_manifest.get(v, {}).get('fixes', {})
+                        for curr_fix in fixes:
+                            if show_info_to_gui:
+                                self.main_window.update_gui_msg_board(f'Applying `{curr_fix}`')
+                            logging.info(f'Applying `{curr_fix}` : {fixes[curr_fix]}')
+                            std_outs, std_errs = await self.__async_paramiko_exec_commands(
+                                ssh_conn=ssh_conn,
+                                cmd_list=fixes[curr_fix],
+                                print_to_gui=True)
+
+                            logging.info(f'std_outs >> {std_outs}')
+                            logging.info(f'std_errs >> {std_errs}')
+
+                            assert not std_errs
+                            assert std_outs
+                            platform_fixed = True
+
+        except Exception as e:  # pylint: disable=broad-except
+            logging.error(traceback.format_exc())
+            self.main_window.update_gui_msg_board(e)
+            self.main_window.update_gui_msg_board('More on logs')
+            platform_fixed = False
+            platform_fixed_excp = True
+
+        finally:
+
+            if show_info_to_gui:
+                if platform_fixed:
+                    self.main_window.update_gui_msg_board('Finished to apply the fixes.')
+
+                if platform_fixed_excp:
+                    self.main_window.update_gui_msg_board('An unexpected error was encountered - more on logs. Aborting ..')
+
+            if ssh_conn.get_transport() is not None and ssh_conn.get_transport().is_active():
+                logging.warning(f'ssh_conn active: {ssh_conn.get_transport().is_active()}')
+                ssh_conn.close()
+                logging.warning(f'closed ssh_conn ({ssh_conn})')
 
     async def __async_check_internet_availability(self, ssh_conn):
         cmds_ = [

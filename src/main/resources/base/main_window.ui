@@ -403,6 +403,24 @@
       <string>DEPLOY CONF</string>
      </property>
     </widget>
+    <widget class="QPushButton" name="pushButton_fix_platform">
+     <property name="geometry">
+      <rect>
+       <x>730</x>
+       <y>370</y>
+       <width>125</width>
+       <height>28</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>10</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>FIX PLATFORM</string>
+     </property>
+    </widget>
    </widget>
   </widget>
  </widget>
