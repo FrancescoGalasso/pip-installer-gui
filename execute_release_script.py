@@ -57,6 +57,8 @@ class PipInstallerGuiReleaser:
                 choices=['True','False'],
                 dest="server_alfa_paths",
                 default=False,
+                required=True,
+                type=bool,
                 help="Setup Alfa server paths for wheels and application configurations")
 
             self.args = parser.parse_args()
