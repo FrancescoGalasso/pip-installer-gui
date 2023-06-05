@@ -514,6 +514,10 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                                 time.sleep(1)
                             output = channel.recv(1024).decode()
                             logging.info(output)
+
+                            if output and 'is not running' in output:
+                                raise RuntimeError('Supervisor process "dispatcher_alfadesk" must be in RUNNING status ..')
+
                             if output and f'{curr_fix} terminated' in output:
                                  platform_fixed = True
 
@@ -524,7 +528,6 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         except Exception as e:  # pylint: disable=broad-except
             logging.error(traceback.format_exc())
             self.main_window.update_gui_msg_board(e)
-            self.main_window.update_gui_msg_board('More on logs')
             platform_fixed = False
             platform_fixed_excp = True
 
