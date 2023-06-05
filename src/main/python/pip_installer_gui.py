@@ -339,7 +339,13 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
     def apply_fix_on_target(self, path_pem_file, machine_ip):
         
-        ssh_conn = self.create_ssh_connection_to_server(machine_ip, path_pem_file)
+        try:
+            self.validate_ip_machine(machine_ip)
+            ssh_conn = self.create_ssh_connection_to_server(machine_ip, path_pem_file)
+        except Exception as exc:    # pylint: disable=broad-except
+            logging.error(traceback.format_exc())
+            self.main_window.update_gui_msg_board(exc)
+            return
 
         asyncio.ensure_future(
             self.__async_apply_fix_on_target(ssh_conn)
