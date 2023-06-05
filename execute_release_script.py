@@ -54,7 +54,6 @@ class PipInstallerGuiReleaser:
             parser.add_argument(
                 '-s',
                 '--server-alfa',
-                choices=['True','False'],
                 dest="server_alfa_paths",
                 default=False,
                 required=True,
