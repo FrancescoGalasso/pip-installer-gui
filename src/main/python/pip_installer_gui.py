@@ -35,7 +35,7 @@ CFG_FILE_NAME = ''.join(['config', os.sep, 'config.ini'])
 PEM_FILE = ''.join(['config', os.sep, 'keyy.pem'])
 PIG_LOG_CFG = ''.join(['config', os.sep, 'logger.cfg'])
 PIG_LOG_FILE = ''.join(['log', os.sep, 'PipInstallerGui.log'])
-PIG_MANIFEST_FILE = ''.join(['manifest', os.sep, 'manifest.json'])
+PIG_MANIFEST_FILE = ''.join(['platform_scripts', os.sep, 'manifest.json'])
 CACHE = {}
 
 
@@ -437,15 +437,20 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         asyncio.set_event_loop(qt_event_loop)
         return qt_event_loop
 
+
     async def __async_apply_fix_on_target(self, ssh_conn, show_info_to_gui=True):
 
         try:
+            changelog_messages = []
             # tricky way to assigning a value to the self.lsb_release attribute
             await self.__validate_platform_alfa(ssh_conn)
             logging.info(self.lsb_release)
 
             target_plat_name = self.lsb_release.get('DISTRIB_DESCRIPTION')
             target_plat_ver = self.lsb_release.get('PLATFORM_VERSION', '5')
+
+            logging.info(f'target_plat_name: {target_plat_name}')
+            logging.info(f'target_plat_ver: {target_plat_ver}')
 
             if not target_plat_name:
                 raise RuntimeError('Missing DISTRIB_DESCRIPTION in file /etc/lsb-release ... Aborting')
@@ -460,29 +465,61 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
             platform_fixed = False
             platform_fixed_excp = False
+            manifest_platform = False
             # the BPi-M5 Armbian platform was released with VERSION=5
             if target_plat_name == 'Armbian Alfa general-purpose BPi-M5':
+                manifest_platform = True
                 bananapim5_manifest = manifest.get('bananapi', {})
                 logging.debug(bananapim5_manifest)
 
                 for v in bananapim5_manifest:
-                    if target_plat_ver in v:
+                    if v[1:] in target_plat_ver:
                         fixes = bananapim5_manifest.get(v, {}).get('fixes', {})
                         for curr_fix in fixes:
-                            if show_info_to_gui:
-                                self.main_window.update_gui_msg_board(f'Applying `{curr_fix}`')
-                            logging.info(f'Applying `{curr_fix}` : {fixes[curr_fix]}')
+                            logging.info(f'Applying `{curr_fix}`')
+
+                            target_scripts_dir_path = "/home/admin/plat_fix_scripts"
+                            cmd_mkdir_scripts = f"mkdir -p {target_scripts_dir_path}"
+                            await self.__async_paramiko_exec_commands(
+                                ssh_conn=ssh_conn,
+                                cmd_list=[cmd_mkdir_scripts],
+                                print_to_gui=False)
+
+                            await asyncio.sleep(0.25)
+                            _script_path = ''.join(['platform_scripts', os.sep, f'{curr_fix}.sh'])
+                            script_path = self.fbs_ctx.get_resource(_script_path)
+                            logging.info(f'local path: {script_path}')
+                            logging.info(f'remote path: {target_scripts_dir_path}')
+                            script_remote_path = ''.join([target_scripts_dir_path, '/', f'v5_{curr_fix}.sh'])
+                            await self.__async_paramiko_sftp_put(
+                                ssh_conn=ssh_conn,
+                                local_path=script_path,
+                                remote_path=script_remote_path)
+
+                            script_cmd = f"""chmod +x /home/admin/plat_fix_scripts/v5_{curr_fix}.sh
+                                             sleep 0.25
+                                             sed -i 's/\r$//' /home/admin/plat_fix_scripts/v5_{curr_fix}.sh"""
+
                             std_outs, std_errs = await self.__async_paramiko_exec_commands(
                                 ssh_conn=ssh_conn,
-                                cmd_list=fixes[curr_fix],
-                                print_to_gui=True)
-
-                            logging.info(f'std_outs >> {std_outs}')
-                            logging.info(f'std_errs >> {std_errs}')
-
+                                cmd_list=[script_cmd],
+                                print_to_gui=False)
                             assert not std_errs
-                            assert std_outs
-                            platform_fixed = True
+
+                            # invoke_shell sends both stdout and stderr to the same place (the channel)
+                            # unlike exec_command which separates them.
+                            channel = ssh_conn.invoke_shell()
+                            channel.send(f"/usr/bin/bash /home/admin/plat_fix_scripts/v5_{curr_fix}.sh\n")
+                            while not channel.recv_ready():
+                                time.sleep(1)
+                            output = channel.recv(1024).decode()
+                            logging.info(output)
+                            if output and f'{curr_fix} terminated' in output:
+                                 platform_fixed = True
+
+                            if platform_fixed and show_info_to_gui:
+                                self.main_window.update_gui_msg_board(f'Applied `{curr_fix}`')
+                                changelog_messages.append(f'{datetime.datetime.now()} - fixed {curr_fix} on platform {target_plat_name} v{v[1:]}')
 
         except Exception as e:  # pylint: disable=broad-except
             logging.error(traceback.format_exc())
@@ -496,9 +533,21 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             if show_info_to_gui:
                 if platform_fixed:
                     self.main_window.update_gui_msg_board('Finished to apply the fixes.')
+                    generate_changelog_cmd = ['touch /home/admin/plat_fix_scripts/CHANGELOG-FIXES']
+                    for c_msg in changelog_messages:
+                        generate_changelog_cmd.append(f'echo "{c_msg}" >> /home/admin/plat_fix_scripts/CHANGELOG-FIXES')
+                    await self.__async_paramiko_exec_commands(
+                                ssh_conn=ssh_conn,
+                                cmd_list=generate_changelog_cmd,
+                                print_to_gui=False)
 
-                if platform_fixed_excp:
+                elif platform_fixed_excp:
                     self.main_window.update_gui_msg_board('An unexpected error was encountered - more on logs. Aborting ..')
+                else:
+                    gui_msg = 'Platform already fixed!'
+                    if not manifest_platform:
+                        gui_msg = 'The current platform does not need fixing!'
+                    self.main_window.update_gui_msg_board(gui_msg)
 
             if ssh_conn.get_transport() is not None and ssh_conn.get_transport().is_active():
                 logging.warning(f'ssh_conn active: {ssh_conn.get_transport().is_active()}')

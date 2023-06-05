@@ -1,0 +1,14 @@
+{
+    "metadata": {
+        "manifest_version": "1"
+    },
+    "platforms": {
+        "bananapi": {
+            "v5": {
+                "description": "Armbian 21.08.0-trunk Buster with Linux 5.10.51-meson64",
+                "fixes": ["fix_resolv_conf", "fix_alfa_legacy"]
+            }
+        },
+        "raspberrypi": {}
+    }
+}
