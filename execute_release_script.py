@@ -55,13 +55,10 @@ class PipInstallerGuiReleaser:
                 '-s',
                 '--server-alfa',
                 dest="server_alfa_paths",
-                default=False,
-                required=True,
-                type=bool,
+                action='store_true',
                 help="Setup Alfa server paths for wheels and application configurations")
 
             self.args = parser.parse_args()
-            print(f'server_alfa_paths -> {self.args.server_alfa_paths}')
 
             self.restore_pig_log()
             self.restore_logger_cfg_file()
@@ -149,7 +146,9 @@ class PipInstallerGuiReleaser:
             application_name = settings_json.get('app_name', 'PipInstallerGui')
             default_installer_name = f'{application_name}Setup'
             installer_new_name = f'Customer_{default_installer_name}'
-            if self.args.server_alfa_paths:
+            _dict_args = vars(self.args)
+            logging.warning(f'server_alfa_paths: {_dict_args.get('server_alfa_paths', False)}')
+            if _dict_args.get('server_alfa_paths', False) is True:
                 installer_new_name = f'Alfa_{default_installer_name}'
 
         cmds = [
