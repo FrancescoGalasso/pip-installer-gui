@@ -10,4 +10,3 @@
 *.pem
 *.log
 server_paths.ini
-**/platform_scripts/*.sh
