@@ -22,6 +22,7 @@ import subprocess
 import glob
 import configparser
 import paramiko                                                     # pylint: disable=import-error
+import redis
 
 from pip_errors import PipValidationError
 from deepdiff import DeepDiff                                       # pylint: disable=import-error
@@ -36,6 +37,7 @@ PEM_FILE = ''.join(['config', os.sep, 'keyy.pem'])
 PIG_LOG_CFG = ''.join(['config', os.sep, 'logger.cfg'])
 PIG_LOG_FILE = ''.join(['log', os.sep, 'PipInstallerGui.log'])
 PIG_MANIFEST_FILE = ''.join(['platform_scripts', os.sep, 'manifest.json'])
+PIG_RESULT_FIXES_JSON = ''.join(['platform_scripts', os.sep, 'fix_results.json'])
 CACHE = {}
 
 
@@ -348,7 +350,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             return
 
         asyncio.ensure_future(
-            self.__async_apply_fix_on_target(ssh_conn)
+            self.__async_apply_fix_on_target(ssh_conn, extra={'machine_ip': machine_ip})
         )
 
     def install_and_deploy_on_target(self,
@@ -444,7 +446,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         return qt_event_loop
 
 
-    async def __async_apply_fix_on_target(self, ssh_conn, show_info_to_gui=True):
+    async def __async_apply_fix_on_target(self, ssh_conn, extra, show_info_to_gui=True):
 
         try:
             changelog_messages = []
@@ -554,6 +556,10 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                                 cmd_list=generate_changelog_cmd,
                                 print_to_gui=False)
 
+                    if extra and extra.get("machine_ip"):
+                        m_ip = extra.get("machine_ip")
+                        await self.__async_update_result_fixes_json(m_ip, changelog_messages)
+
                 elif platform_fixed_excp:
                     self.main_window.update_gui_msg_board('An unexpected error was encountered - more on logs. Aborting ..')
                 else:
@@ -657,6 +663,34 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             await asyncio.sleep(timeout)
 
         return (stdouts, stderrs)
+
+    async def __async_update_result_fixes_json(self, m_ip, changelogs):
+
+        try:
+
+            redis_bus_url = f'redis://{m_ip}:6379/0'
+            logging.info(f'redis_bus_url -> {m_ip}')
+            redis_bus = redis.StrictRedis(host=m_ip, port=6379)
+            ret = redis_bus.get('ALFA_CONFIG')
+            assert ret
+            config = json.loads(ret.decode())
+            target_sn = config.get('ALFA_SERIAL_NUMBER', 00000000)
+
+            result_fixes = {}
+            path_result_fixes_json = self.fbs_ctx.get_resource(PIG_RESULT_FIXES_JSON)
+            with open(path_result_fixes_json, 'r') as fixes_json:
+                result_fixes = json.load(fixes_json)
+
+            logging.info(f'result_fixes: {result_fixes}')
+            result_fixes.update({target_sn: changelogs})
+            logging.info(f'result_fixes updated: {result_fixes}')
+            with open(path_result_fixes_json, 'w') as fixes_json:
+                # result_fixes = json.load(fixes_json)
+                fixes_json.write(json.dumps(result_fixes))
+
+        except Exception as e:
+            logging.error(traceback.format_exc())
+            logging.error(e)
 
     async def __validate_platform_alfa(self, ssh_client):
         """

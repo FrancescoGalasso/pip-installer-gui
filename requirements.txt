@@ -3,4 +3,5 @@ PyQt5==5.15.2
 PyInstaller==3.4
 qasync==0.13.0
 paramiko==2.7.2
-deepdiff=5.8.1
+deepdiff==5.8.1
+redis==2.10.6
