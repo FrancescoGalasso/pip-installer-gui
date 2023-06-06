@@ -494,8 +494,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                             await asyncio.sleep(0.25)
                             _script_path = ''.join(['platform_scripts', os.sep, f'{curr_fix}.sh'])
                             script_path = self.fbs_ctx.get_resource(_script_path)
-                            logging.info(f'local path: {script_path}')
-                            logging.info(f'remote path: {target_scripts_dir_path}')
+                            logging.debug(f'local path: {script_path}')
+                            logging.debug(f'remote path: {target_scripts_dir_path}')
                             script_remote_path = ''.join([target_scripts_dir_path, '/', f'v5_{curr_fix}.sh'])
                             await self.__async_paramiko_sftp_put(
                                 ssh_conn=ssh_conn,
@@ -518,8 +518,12 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                             channel.send(f"/usr/bin/bash /home/admin/plat_fix_scripts/v5_{curr_fix}.sh\n")
                             while not channel.recv_ready():
                                 time.sleep(1)
-                            output = channel.recv(1024).decode()
+                            time.sleep(3)
+                            output = channel.recv(2048).decode()
                             logging.info(output)
+                            if channel.get_transport().is_active():
+                                logging.debug('Closing channel for invoke_shell')
+                                channel.close()
 
                             if output and 'is not running' in output:
                                 raise RuntimeError('Supervisor process "dispatcher_alfadesk" must be in RUNNING status ..')
