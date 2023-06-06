@@ -47,19 +47,18 @@ To release a new version it is necessary to execute the Python script [execute_r
 
 ```
 python execute_release_script.py --help
-usage: Pip Installer Gui Releaser [-h] -s {True,False}
+usage: Pip Installer Gui Releaser [-h] [-s]
 
 Generate the window installer for Pip Installer Gui
 
 optional arguments:
-  -h, --help            show this help message and exit
-  -s {True,False}, --server-alfa {True,False}
-                        Setup Alfa server paths for wheels and application
-                        configurations
+  -h, --help         show this help message and exit
+  -s, --server-alfa  Setup Alfa server paths for wheels and application
+                     configurations
 ```
 
 ```
-(fbs_venv) C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui>python execute_release_script.py -s True
+(fbs_venv) C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui>python execute_release_script.py -s
 server_alfa_paths -> True
 ['wheel_path', 'conf_files_path']
 WARNING:root:Updated application config file with Alfa Server paths !
@@ -74,7 +73,7 @@ WARNING:root:path_installer -> C:\Users\francesco.galasso\Documents\GitHub\pip-i
 WARNING:root:path_installer_renamed -> C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui\target\Alfa_PipInstallerGuiSetup.exe
 WARNING:root:Renamed Installer file to "Alfa_PipInstallerGuiSetup"
 
-(fbs_venv) C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui>python execute_release_script.py -s False
+(fbs_venv) C:\Users\francesco.galasso\Documents\GitHub\pip-installer-gui>python execute_release_script.py
 server_alfa_paths -> False
 WARNING:root:Skip using Alfa Server paths for Pip Installer Gui
 WARNING:root:Created application config !

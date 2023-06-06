@@ -147,7 +147,7 @@ class PipInstallerGuiReleaser:
             default_installer_name = f'{application_name}Setup'
             installer_new_name = f'Customer_{default_installer_name}'
             _dict_args = vars(self.args)
-            logging.warning(f'server_alfa_paths: {_dict_args.get('server_alfa_paths', False)}')
+            logging.warning(f'server_alfa_paths: {_dict_args.get("server_alfa_paths", False)}')
             if _dict_args.get('server_alfa_paths', False) is True:
                 installer_new_name = f'Alfa_{default_installer_name}'
 
