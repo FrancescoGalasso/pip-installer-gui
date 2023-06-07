@@ -547,7 +547,6 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
             if show_info_to_gui:
                 if platform_fixed:
-                    self.main_window.update_gui_msg_board('Finished to apply the fixes.')
                     generate_changelog_cmd = ['touch /home/admin/plat_fix_scripts/CHANGELOG-FIXES']
                     for c_msg in changelog_messages:
                         generate_changelog_cmd.append(f'echo "{c_msg}" >> /home/admin/plat_fix_scripts/CHANGELOG-FIXES')
@@ -559,6 +558,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                     if extra and extra.get("machine_ip"):
                         m_ip = extra.get("machine_ip")
                         await self.__async_update_result_fixes_json(m_ip, changelog_messages)
+
+                    self.main_window.update_gui_msg_board('Finished to apply the fixes.')
 
                 elif platform_fixed_excp:
                     self.main_window.update_gui_msg_board('An unexpected error was encountered - more on logs. Aborting ..')
@@ -671,8 +672,17 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             redis_bus_url = f'redis://{m_ip}:6379/0'
             logging.info(f'redis_bus_url -> {m_ip}')
             redis_bus = redis.StrictRedis(host=m_ip, port=6379)
-            ret = redis_bus.get('ALFA_CONFIG')
-            assert ret
+            start_time = time.time()
+            ret = None
+            while time.time() - start_time < 50:
+                ret = redis_bus.get('ALFA_CONFIG')
+                if ret:
+                    logging.debug(f'ret -> {ret}')
+                    break
+                await asyncio.sleep(1)
+
+            assert ret, "Key 'ALFA_CONFIG' not found in Redis bus after waiting for 50 seconds"
+
             config = json.loads(ret.decode())
             target_sn = config.get('ALFA_SERIAL_NUMBER', 00000000)
 
@@ -691,6 +701,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         except Exception as e:
             logging.error(traceback.format_exc())
             logging.error(e)
+            self.main_window.update_gui_msg_board('ERROR - cannot update result_fixes.json')
 
     async def __validate_platform_alfa(self, ssh_client):
         """
