@@ -520,7 +520,9 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                             channel.send(f"/usr/bin/bash /home/admin/plat_fix_scripts/v5_{curr_fix}.sh\n")
                             while not channel.recv_ready():
                                 time.sleep(1)
-                            time.sleep(3)
+                            # time.sleep(3) # ORIG
+                            # time.sleep(6) # 1st test
+                            time.sleep(9)
                             output = channel.recv(2048).decode()
                             logging.info(output)
                             if channel.get_transport().is_active():

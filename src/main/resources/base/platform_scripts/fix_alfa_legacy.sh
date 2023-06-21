@@ -24,6 +24,6 @@ if [ ! -f /home/admin/plat_fix_scripts/docker-alfa-legacy-instance-v1-fix-1 ]; t
     sudo docker exec -it alfa-legacy-instance bash -c "sed -i '113,115c\\\\n          self._close(exc=e)' /home/alfadesk/dispatcher/venv/lib/python3.8/site-packages/dispatcher/serial_asyncio.py"
     sudo sed -i 's/^PLATFORM_VERSION=5$/PLATFORM_VERSION=5-fix-resolv.conf-and-alfa-legacy/g' /etc/lsb-release
     sudo sed -i 's/^PLATFORM_VERSION=5-fix-resolv.conf$/PLATFORM_VERSION=5-fix-resolv.conf-and-alfa-legacy/g' /etc/lsb-release
-    echo 'fix_alfa_legacy terminated'
+    echo 'fix_alfa_legacy terminated - fixed old dispatcher'
     sudo supervisorctl reload
 fi
