@@ -78,5 +78,5 @@ EOF
 
     sudo sed -i 's/^PLATFORM_VERSION=5-fix-resolv.conf-and-alfa-legacy$/PLATFORM_VERSION=5-fix-resolv.conf-and-alfa-legacy-and-slow-alfatint/g' /etc/lsb-release
     echo 'fix_alfa_legacy_2 terminated - fixed slow alfatint'
-    sudo supervisorctl reload
+    # sudo supervisorctl reload
 fi
