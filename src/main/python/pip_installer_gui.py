@@ -95,13 +95,15 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         self.ui_path = self.ctx.get_resource('main_window.ui')
         uic.loadUi(self.ui_path, self)
 
-        self.btn_open_folder_files.clicked.connect(self.__get_wheel_file)
         self.pushButton_validate.clicked.connect(self.on_btn_validate_clicked)
         self.pushButton_install.clicked.connect(self.on_btn_install_clicked)
         self.pushButton_deploy.clicked.connect(self.on_btn_deploy_clicked)
         self.pushButton_clear.clicked.connect(self.on_btn_clear_clicked)
-        self.pushButton_choose_conf.clicked.connect(self.__get_conf_file_dir)
         self.pushButton_fix_platform.clicked.connect(self.on_btn_fix_platform_clicked)
+
+        self.btn_open_folder_files.clicked.connect(self.__get_wheel_file)
+        self.pushButton_choose_conf.clicked.connect(self.__get_conf_file_dir)
+        self.pushButton_choose_docker_img.clicked.connect(self.__get_docker_img)
 
         self.qline_ip.textChanged.connect(self.on_ip_text_changed)
 
@@ -182,7 +184,10 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
         try:
             path_pem_file = self.ctx.get_resource(PEM_FILE)
             ip_machine = self.qline_ip.text()
-            self.parent.apply_fix_on_target(path_pem_file, ip_machine)
+            docker_img_path = self.qline_docker_img_path.text()
+            if docker_img_path == '':
+                raise RuntimeError('Please select an Alfa Docker Image file!')
+            self.parent.apply_fix_on_target(path_pem_file, ip_machine, docker_img_path)
 
         except Exception as excp: # pylint: disable=broad-except
             self.update_gui_msg_board(excp)
@@ -235,6 +240,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             self.comboBox_config_files.setCurrentIndex(0)
             self.qline_folder_conf_path.setText('')
             self.qline_folder_path.setText('')
+            self.qline_docker_img_path.setText('')
             self.comboBox_config_files.setEnabled(False)
         elif method == 'validated':
             self.pushButton_validate.setEnabled(False)
@@ -265,6 +271,7 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             self.comboBox_config_files.setCurrentIndex(0)
             self.qline_folder_conf_path.setText('')
             self.qline_folder_path.setText('')
+            self.qline_docker_img_path.setText('')
             self.comboBox_config_files.setEnabled(False)
 
     def handle_pushButton_choose_conf(self):
@@ -294,6 +301,15 @@ class MainWindow(QMainWindow):  # pylint: disable=too-few-public-methods
             QFileDialog.ShowDirsOnly)
         self.qline_folder_conf_path.setText(path_whl)
         logging.info(f'selected wheel file: {path_whl}')
+
+    def __get_docker_img(self):
+        path_docker_img = QFileDialog.getOpenFileName(
+            QFileDialog(),
+            'Open file',
+            '',
+            "docker image (*.tar)",)
+        self.qline_docker_img_path.setText(path_docker_img[0])
+        logging.info(f'selected docker img file: {path_docker_img[0]}')
 
     def __init_ui(self):
 
@@ -339,7 +355,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         self.__async_qt_event_loop = self.__init_async_event_loop()
         self.run_forever()
 
-    def apply_fix_on_target(self, path_pem_file, machine_ip):
+    def apply_fix_on_target(self, path_pem_file, machine_ip, docker_img_path):
         
         try:
             self.validate_ip_machine(machine_ip)
@@ -349,8 +365,12 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             self.main_window.update_gui_msg_board(exc)
             return
 
+        extra_ = {
+            'machine_ip': machine_ip,
+            'docker_img': docker_img_path,
+        }
         asyncio.ensure_future(
-            self.__async_apply_fix_on_target(ssh_conn, extra={'machine_ip': machine_ip})
+            self.__async_apply_fix_on_target(ssh_conn, extra=extra_)
         )
 
     def install_and_deploy_on_target(self,
@@ -446,6 +466,56 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         return qt_event_loop
 
 
+    async def __update_docker_image(self, docker_img_path, manifest_docker_info, ssh_conn):
+
+        if manifest_docker_info not in docker_img_path:
+            logging.error(f'Invalid Docker image ({docker_img_path})! Skipping update Docker image ..')
+            self.main_window.update_gui_msg_board('Invalid Docker image! Skipping update Docker image ..')
+            return
+
+        self.main_window.update_gui_msg_board('Starting upload new Docker image..')
+        cmd_ = f"rm -f /home/admin/alfa-legacy_arm64.tar"
+        logging.debug(f'cmd -> {cmd_}')
+        await self.__async_paramiko_exec_commands(
+            ssh_conn=ssh_conn,
+            cmd_list=[cmd_],
+            print_to_gui=False)
+
+        await asyncio.sleep(0.25)
+        remote_path = '/home/admin/alfa-legacy_arm64.tar'
+        logging.debug(f'local path: {docker_img_path}')
+        logging.debug(f'remote path: {remote_path}')
+        await self.__async_paramiko_sftp_put(
+            ssh_conn=ssh_conn,
+            local_path=docker_img_path,
+            remote_path=remote_path)
+
+        docker_cmds = [
+            'sudo supervisorctl stop dispatcher_alfadesk',
+            'sudo docker system prune -a -f',
+            'sudo docker load -i ~/alfa-legacy_arm64.tar',
+            'sudo docker run \
+  --name alfa-legacy-instance \
+  --add-host=host.docker.internal:host-gateway \
+  -p 80:80/tcp \
+  --mount source=alfa-legacy-db,destination=/var/lib/postgresql/ \
+  -v /dev:/dev \
+  -v /etc/timezone:/etc/timezone \
+  --tmpfs /var/log:uid=1000,gid=1000 \
+  --tmpfs /tmp:uid=1000,gid=1000 \
+  --tmpfs /run:uid=1000,gid=1000 \
+  --privileged \
+  -d -i alfa-legacy',
+            'sleep 5',
+            'sudo supervisorctl start dispatcher_alfadesk'
+        ]
+        await self.__async_paramiko_exec_commands(
+            ssh_conn=ssh_conn,
+            cmd_list=docker_cmds,
+            print_to_gui=False)
+
+        self.main_window.update_gui_msg_board('Docker image updated!')
+
     async def __async_apply_fix_on_target(self, ssh_conn, extra, show_info_to_gui=True):
 
         try:
@@ -540,6 +610,10 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                             if platform_fixed and show_info_to_gui:
                                 self.main_window.update_gui_msg_board(f'Applied `{curr_fix}`')
                                 changelog_messages.append(f'{datetime.datetime.now()} - fixed {curr_fix} on platform {target_plat_name} v{v[1:]}')
+
+                        if extra and extra.get("docker_img"):
+                            docker_img_info = bananapim5_manifest.get(v, {}).get('docker_image_fixed', "")
+                            await self.__update_docker_image(extra.get("docker_img"), docker_img_info, ssh_conn)
 
         except Exception as e:  # pylint: disable=broad-except
             logging.error(traceback.format_exc())
