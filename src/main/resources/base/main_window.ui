@@ -404,10 +404,13 @@
      </property>
     </widget>
     <widget class="QPushButton" name="pushButton_fix_platform">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
      <property name="geometry">
       <rect>
-       <x>730</x>
-       <y>370</y>
+       <x>460</x>
+       <y>320</y>
        <width>125</width>
        <height>28</height>
       </rect>
@@ -419,6 +422,37 @@
      </property>
      <property name="text">
       <string>FIX PLATFORM</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="pushButton_choose_docker_img">
+     <property name="geometry">
+      <rect>
+       <x>90</x>
+       <y>320</y>
+       <width>171</width>
+       <height>31</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>9</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>choose docker img</string>
+     </property>
+    </widget>
+    <widget class="QLineEdit" name="qline_docker_img_path">
+     <property name="geometry">
+      <rect>
+       <x>270</x>
+       <y>320</y>
+       <width>171</width>
+       <height>31</height>
+      </rect>
+     </property>
+     <property name="readOnly">
+      <bool>true</bool>
      </property>
     </widget>
    </widget>
