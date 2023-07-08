@@ -10,7 +10,7 @@
                     "fix_resolv_conf",
                     "fix_banana_platform"
                 ],
-                "docker_image_fixed": "alfa-legacy_arm64_v4.tar"
+                "docker_image_fixed": "alfa-legacy_arm64_v5.tar"
             }
         },
         "raspberrypi": {}
