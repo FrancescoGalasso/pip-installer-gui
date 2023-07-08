@@ -68,44 +68,54 @@ cat > $restore_display_resolution_patch << "EOF"
    sleep 1 
 EOF
 
+echo "Created Patch Files .."
+
 ### Create ORIG files
 if [ ! -f "$start_browser_orig" ]; then
-    cp "$start_browser" "$start_browser_orig"
+  cp "$start_browser" "$start_browser_orig"
 fi
 
 if [ ! -f "$rtc_ds3231_orig" ]; then
-    sudo cp "$rtc_ds3231" "$rtc_ds3231_orig"
+  sudo cp "$rtc_ds3231" "$rtc_ds3231_orig"
 fi
 
 if [ ! -f "$restore_display_resolution_orig" ]; then
-    cp "$restore_display_resolution" "$restore_display_resolution_orig"
+  cp "$restore_display_resolution" "$restore_display_resolution_orig"
 fi
 
+echo "Created .ORIG files .."
 
 ### Applying patches
-output_start_browser_patch=$(cd /home/admin && patch -N -i $start_browser_patch -p0 -r - $start_browser)
-if echo "$output_start_browser_patch" | grep -q "Skipping patch"; then
-    echo "Skipping patch .. Start Browser Patch already applied !"
-else
-    patch_applied=1
-    echo "Start Browser Patch applied !"
-fi
+execute_patch() {
+  cmd=$1
+  cmd_name=$2
 
-output_rtc_ds3231_patch=$(cd /etc/systemd/system/ && sudo patch -N -i $rtc_ds3231_patch -p0 -r - $rtc_ds3231)
-if echo "$output_rtc_ds3231_patch" | grep -q "Skipping patch"; then
-    echo "Skipping patch .. RTC DS3231 Patch already applied !"
-else
+  echo "$cmd"
+  set +e # Temporarily disable the 'exit on error' setting
+  output=$(eval "$cmd" 2>&1) # Remember to use eval to execute command stored in string
+  set -e # Re-enable the 'exit on error' setting
+  if echo "$output" | grep -q "Skipping patch"; then
+    echo "Skipping patch .. $cmd_name already applied !"
+  else
     patch_applied=1
-    echo "RTC DS3231 Patch applied !"
-fi
+    echo "$cmd_name applied !"
+  fi
+}
 
-output_restore_display_resolution_patch=$(cd /home/admin && patch -N -i $restore_display_resolution_patch -p0 -r - $restore_display_resolution)
-if echo "$output_restore_display_resolution_patch" | grep -q "Skipping patch"; then
-    echo "Skipping patch .. Restore Display Resolution Patch already applied !"
-else
-    patch_applied=1
-    echo "Restore Display Resolution Patch applied !"
-fi
+patchs=(
+  "patch -N -i $start_browser_patch -p0 -r - $start_browser"
+  "patch -N -i $restore_display_resolution_patch -p0 -r - $restore_display_resolution"
+  "sudo patch -N -i $rtc_ds3231_patch -p0 -r - $rtc_ds3231"
+)
+patch_names=(
+  "Start Browser Patch"
+  "Restore Display Resolution Patch"
+  "RTC DS3231 Patch"
+)
+
+for i in "${!patchs[@]}"; do
+    execute_patch "${patchs[i]}" "${patch_names[i]}"
+done
 
 ### Other stuffs related to platform
 if [ ! -f "/etc/udev/rules.d/99-rtc1.rules" ]; then
@@ -117,6 +127,12 @@ if [ ! -f "/etc/udev/rules.d/99-rtc1.rules" ]; then
 fi
 
 rm -f /home/admin/index.*
+
+lsb_release="/etc/lsb-release"
+line="PLATFORM_VERSION=5-fix-resolv.conf-and-alfa-legacy-v5"
+if ! grep -q "$line" "$lsb_release"; then
+   sudo sed -i "s/^PLATFORM_VERSION=5.*$/$line/" "$lsb_release"
+fi
 
 if [ "$patch_applied" -eq 1 ]; then
     echo "fix_banana_platform terminated"
