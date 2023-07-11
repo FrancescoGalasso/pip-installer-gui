@@ -11,3 +11,4 @@
 *.log
 server_paths.ini
 **/config/fix_results.json
+**/config/credentials.txt
