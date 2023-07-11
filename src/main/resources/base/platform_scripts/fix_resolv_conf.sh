@@ -8,4 +8,6 @@ if [ ! -f /etc/resolv.conf.bak ]; then
     sudo sed -i 's/^PLATFORM_VERSION=5$/PLATFORM_VERSION=5-fix-resolv.conf/g' /etc/lsb-release
     sudo sed -i 's/^PLATFORM_VERSION=5-fixed$/PLATFORM_VERSION=5-fix-resolv.conf/g' /etc/lsb-release
     echo 'fix_resolv_conf terminated'
+else
+	echo "resolv.conf already fixed on the platform!"
 fi
