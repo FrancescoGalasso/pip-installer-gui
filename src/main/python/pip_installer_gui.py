@@ -23,6 +23,8 @@ import glob
 import configparser
 import paramiko                                                     # pylint: disable=import-error
 import redis
+import smtplib
+import requests
 
 from pip_errors import PipValidationError
 from deepdiff import DeepDiff                                       # pylint: disable=import-error
@@ -38,6 +40,7 @@ PIG_LOG_CFG = ''.join(['config', os.sep, 'logger.cfg'])
 PIG_LOG_FILE = ''.join(['log', os.sep, 'PipInstallerGui.log'])
 PIG_MANIFEST_FILE = ''.join(['platform_scripts', os.sep, 'manifest.json'])
 PIG_RESULT_FIXES_JSON = ''.join(['platform_scripts', os.sep, 'fix_results.json'])
+MAIL_CREDENTIALS_FILE = ''.join(['config', os.sep, 'credentials.txt'])
 CACHE = {}
 
 
@@ -465,13 +468,75 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         asyncio.set_event_loop(qt_event_loop)
         return qt_event_loop
 
+    async def __send_mail(self, credentials, msg_subject, msg_body):
+
+        try:
+
+            mail = None
+            app_passwd = None
+            with open(credentials, 'r') as f:
+                lines = f.readlines()
+                mail = lines[0].strip()
+                app_passwd = lines[1].strip()
+
+            MAIL_RECIPIENTS = [
+                'francescogalasso@alfadispenser.com',
+                'filippogurgoglione@alfadispenser.com',
+                'giulianosolera@alfadispenser.com',
+                'marcolunghini@alfadispenser.com'
+            ]
+            # MAIL_RECIPIENTS = ['francescogalasso@alfadispenser.com']
+
+            assert mail
+            assert app_passwd
+
+            with smtplib.SMTP_SSL(host="smtp.gmail.com", port=465, timeout=15) as smtp_ssl:
+                logging.debug("Connection Object : {}".format(smtp_ssl))
+                resp_code, response = smtp_ssl.login(user=mail, password=app_passwd)
+
+                logging.info("Response Code : {}".format(resp_code))
+                logging.info("Response      : {}".format(response.decode()))
+                assert int(resp_code)==235, 'Authentication failed ..'
+
+                message_body = ""
+                for key, value in msg_body.items():
+                    if key == 'details' and isinstance(value, dict):
+                        message_body += f"{key}:\n"
+                        for detail_key, detail_value in value.items():
+                            message_body += f"  {detail_key}:\n  {detail_value}\n"
+                    else:
+                        message_body += f"{key}:\n{value}\n"
+
+                message = 'Subject: {}\n\n{}'.format(msg_subject, message_body)
+
+                response = smtp_ssl.sendmail(
+                    from_addr=mail,
+                    to_addrs=MAIL_RECIPIENTS,
+                    msg=message
+                )
+
+        except (smtplib.SMTPConnectError, socket.gaierror) as e:
+            logging.error("Failed to connect to the server. Possible causes:")
+            logging.error("1. No internet connection.")
+            logging.error("2. The SMTP server is blocked by a firewall.")
+            logging.error(f"System message: {e}")
+
+        except  socket.timeout as etout:
+            logging.error(etout)
+
+        except Exception as e:
+            logging.error(f"An unexpected error occurred: {e}")
+
+        else:
+            logging.info('Mail inviata !')
 
     async def __update_docker_image(self, docker_img_path, manifest_docker_info, ssh_conn):
 
         if manifest_docker_info not in docker_img_path:
-            logging.error(f'Invalid Docker image ({docker_img_path})! Skipping update Docker image ..')
-            self.main_window.update_gui_msg_board('Invalid Docker image! Skipping update Docker image ..')
-            return
+            result_ko = 'Invalid Docker image! Skipping update Docker image ..'
+            logging.error(f'{docker_img_path} {result_ko}')
+            self.main_window.update_gui_msg_board(f'{result_ko}')
+            return result_ko
 
         self.main_window.update_gui_msg_board('Starting upload new Docker image..')
         cmd_ = f"rm -f /home/admin/alfa-legacy_arm64.tar"
@@ -495,17 +560,17 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             'sudo docker system prune -a -f',
             'sudo docker load -i ~/alfa-legacy_arm64.tar',
             'sudo docker run \
-  --name alfa-legacy-instance \
-  --add-host=host.docker.internal:host-gateway \
-  -p 80:80/tcp \
-  --mount source=alfa-legacy-db,destination=/var/lib/postgresql/ \
-  -v /dev:/dev \
-  -v /etc/timezone:/etc/timezone \
-  --tmpfs /var/log:uid=1000,gid=1000 \
-  --tmpfs /tmp:uid=1000,gid=1000 \
-  --tmpfs /run:uid=1000,gid=1000 \
-  --privileged \
-  -d -i alfa-legacy',
+              --name alfa-legacy-instance \
+              --add-host=host.docker.internal:host-gateway \
+              -p 80:80/tcp \
+              --mount source=alfa-legacy-db,destination=/var/lib/postgresql/ \
+              -v /dev:/dev \
+              -v /etc/timezone:/etc/timezone \
+              --tmpfs /var/log:uid=1000,gid=1000 \
+              --tmpfs /tmp:uid=1000,gid=1000 \
+              --tmpfs /run:uid=1000,gid=1000 \
+              --privileged \
+              -d -i alfa-legacy',
             'sleep 5',
             'sudo supervisorctl start dispatcher_alfadesk'
         ]
@@ -514,9 +579,18 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             cmd_list=docker_cmds,
             print_to_gui=False)
 
-        self.main_window.update_gui_msg_board('Docker image updated!')
+        result_ok = 'Docker image updated!'
+        self.main_window.update_gui_msg_board(result_ok)
+        return result_ok
 
     async def __async_apply_fix_on_target(self, ssh_conn, extra, show_info_to_gui=True):
+
+        mail_messages = {
+            'error': None,
+            'docker message': None,
+            'platform message': None,
+            'details': {}
+        }
 
         try:
             changelog_messages = []
@@ -526,7 +600,6 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
             target_plat_name = self.lsb_release.get('DISTRIB_DESCRIPTION')
             target_plat_ver = self.lsb_release.get('PLATFORM_VERSION', '5')
-
             logging.info(f'target_plat_name: {target_plat_name}')
             logging.info(f'target_plat_ver: {target_plat_ver}')
 
@@ -535,7 +608,6 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
             path_manifest_file = self.fbs_ctx.get_resource(PIG_MANIFEST_FILE)
             manifest = {}
-
             with open(path_manifest_file, 'r') as manifest_file:
                 manifest = json.load(manifest_file)
                 if manifest:
@@ -546,12 +618,12 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             manifest_platform = False
             # the BPi-M5 Armbian platform was released with VERSION=5
             if target_plat_name == 'Armbian Alfa general-purpose BPi-M5':
-                manifest_platform = True
                 bananapim5_manifest = manifest.get('bananapi', {})
                 logging.debug(bananapim5_manifest)
 
                 for v in bananapim5_manifest:
                     if v[1:] in target_plat_ver:
+                        manifest_platform = True
                         fixes = bananapim5_manifest.get(v, {}).get('fixes', {})
                         for curr_fix in fixes:
                             logging.info(f'Applying `{curr_fix}`')
@@ -604,24 +676,43 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                             if output and 'is not running' in output:
                                 raise RuntimeError('Supervisor process "dispatcher_alfadesk" must be in RUNNING status ..')
 
+                            mail_messages['details'].update({
+                               curr_fix: output
+                            })
                             if output and f'{curr_fix} terminated' in output:
                                  platform_fixed = True
 
                             if platform_fixed and show_info_to_gui:
                                 self.main_window.update_gui_msg_board(f'Applied `{curr_fix}`')
-                                changelog_messages.append(f'{datetime.datetime.now()} - fixed {curr_fix} on platform {target_plat_name} v{v[1:]}')
+                                changelog_messages.append(f'{datetime.datetime.now()} - Applied {curr_fix} on platform {target_plat_name} v{v[1:]}')
 
                         if extra and extra.get("docker_img"):
                             docker_img_info = bananapim5_manifest.get(v, {}).get('docker_image_fixed', "")
-                            await self.__update_docker_image(extra.get("docker_img"), docker_img_info, ssh_conn)
+                            result = await self.__update_docker_image(extra.get("docker_img"), docker_img_info, ssh_conn)
+                            docker_msg = f'platform {target_plat_name} v{v[1:]} - {result}'
+                            changelog_messages.append(f'{datetime.datetime.now()} - {docker_msg}')
+                            mail_messages['docker message'] = docker_msg
 
         except Exception as e:  # pylint: disable=broad-except
             logging.error(traceback.format_exc())
             self.main_window.update_gui_msg_board(e)
             platform_fixed = False
             platform_fixed_excp = True
+            mail_messages['error'].update({
+                'err_msg': e,
+                'traceback': traceback.format_exc()
+            })
 
         finally:
+
+            target_sn_alfa40 = None
+            target_sn_alfaadmin = None
+            if extra and extra.get("machine_ip"):
+                m_ip = extra.get("machine_ip")
+                target_sn_alfa40 = await self.get_sn_from_alfa40(m_ip)
+                target_sn_alfaadmin = await self.get_sn_from_alfaadmin(m_ip)
+                logging.info(f'target_sn_alfa40 -> {target_sn_alfa40}')
+                logging.info(f'target_sn_alfaadmin -> {target_sn_alfaadmin}')
 
             if show_info_to_gui:
                 if platform_fixed:
@@ -633,19 +724,26 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                                 cmd_list=generate_changelog_cmd,
                                 print_to_gui=False)
 
-                    if extra and extra.get("machine_ip"):
-                        m_ip = extra.get("machine_ip")
-                        await self.__async_update_result_fixes_json(m_ip, changelog_messages)
-
-                    self.main_window.update_gui_msg_board('Finished to apply the fixes.')
+                    _message = 'Finished to apply the fixes.'
+                    mail_messages['platform message'] = _message
+                    self.main_window.update_gui_msg_board(_message)
 
                 elif platform_fixed_excp:
-                    self.main_window.update_gui_msg_board('An unexpected error was encountered - more on logs. Aborting ..')
+                    _message = 'An unexpected error was encountered - more on logs. Aborting ..'
+                    mail_messages['platform message'] = _message
+                    self.main_window.update_gui_msg_board(_message)
                 else:
-                    gui_msg = 'Platform already fixed!'
+                    _message = 'Platform already fixed!'
                     if not manifest_platform:
-                        gui_msg = 'The current platform does not need fixing!'
-                    self.main_window.update_gui_msg_board(gui_msg)
+                        _message = 'The current platform does not need fixing!'
+                    mail_messages['platform message'] = _message
+                    self.main_window.update_gui_msg_board(_message)
+
+                credentials = self.fbs_ctx.get_resource(MAIL_CREDENTIALS_FILE)
+
+                mail_subject = f"PipInstallerGui platform fix infos about Machine alfa40 SN {target_sn_alfa40} - alfaadmin SN {target_sn_alfaadmin}"
+                await self.__send_mail(credentials, mail_subject, mail_messages)
+                await self.__async_update_result_fixes_json(target_sn_alfa40, changelog_messages)
 
             if ssh_conn.get_transport() is not None and ssh_conn.get_transport().is_active():
                 logging.warning(f'ssh_conn active: {ssh_conn.get_transport().is_active()}')
@@ -743,26 +841,9 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         return (stdouts, stderrs)
 
-    async def __async_update_result_fixes_json(self, m_ip, changelogs):
+    async def __async_update_result_fixes_json(self, target_sn, changelogs):
 
         try:
-
-            redis_bus_url = f'redis://{m_ip}:6379/0'
-            logging.info(f'redis_bus_url -> {m_ip}')
-            redis_bus = redis.StrictRedis(host=m_ip, port=6379)
-            start_time = time.time()
-            ret = None
-            while time.time() - start_time < 50:
-                ret = redis_bus.get('ALFA_CONFIG')
-                if ret:
-                    logging.debug(f'ret -> {ret}')
-                    break
-                await asyncio.sleep(1)
-
-            assert ret, "Key 'ALFA_CONFIG' not found in Redis bus after waiting for 50 seconds"
-
-            config = json.loads(ret.decode())
-            target_sn = config.get('ALFA_SERIAL_NUMBER', 00000000)
 
             result_fixes = {}
             path_result_fixes_json = self.fbs_ctx.get_resource(PIG_RESULT_FIXES_JSON)
@@ -1161,6 +1242,43 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
             ssh_conn.close()
             logging.warning(f'closed ssh_conn ({ssh_conn})')
             self.main_window.setup_or_update_btn_ui('end_deploy')
+
+    @staticmethod
+    async def get_sn_from_alfa40(m_ip):
+        redis_bus_url = f'redis://{m_ip}:6379/0'
+        logging.info(f'redis_bus_url -> {m_ip}')
+        redis_bus = redis.StrictRedis(host=m_ip, port=6379)
+        start_time = time.time()
+        ret = None
+        while time.time() - start_time < 50:
+            ret = redis_bus.get('ALFA_CONFIG')
+            if ret:
+                logging.debug(f'ret -> {ret}')
+                break
+            await asyncio.sleep(1)
+
+        assert ret, "Key 'ALFA_CONFIG' not found in Redis bus after waiting for 50 seconds"
+
+        config = json.loads(ret.decode())
+        target_sn = config.get('ALFA_SERIAL_NUMBER', 00000000)
+        return target_sn
+
+    @staticmethod
+    async def get_sn_from_alfaadmin(m_ip):
+        sn_alfaadmin = 00000000
+        try:
+            response = requests.get(f'http://{m_ip}/a9fb26d39e8b7c99/api/devices/')
+            devices = response.json().get('results', [])
+            if devices:
+                for dev in devices:
+                    if dev.get('channel', '') == "machine":
+                        sn_alfaadmin = dev.get('serial_number')
+        except Exception as e:
+            logging.error(e)
+            logging.traceback.format_exc()
+
+        return sn_alfaadmin
+
 
     @staticmethod
     def __setup_logger(fbs_ctx):
