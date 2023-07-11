@@ -5,3 +5,4 @@ qasync==0.13.0
 paramiko==2.7.2
 deepdiff==5.8.1
 redis==2.10.6
+requests==2.31.0
