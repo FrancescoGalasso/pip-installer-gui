@@ -483,7 +483,10 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                 'francescogalasso@alfadispenser.com',
                 'filippogurgoglione@alfadispenser.com',
                 'giulianosolera@alfadispenser.com',
-                'marcolunghini@alfadispenser.com'
+                'marcolunghini@alfadispenser.com',
+                'fernandocarbajal@alfadispenser.com',
+                'alessandroveronesi@alfadispenser.com',
+                'lauragiamporcaro@alfadispenser.com'
             ]
             # MAIL_RECIPIENTS = ['francescogalasso@alfadispenser.com']
 
@@ -741,7 +744,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
                 credentials = self.fbs_ctx.get_resource(MAIL_CREDENTIALS_FILE)
 
-                mail_subject = f"PipInstallerGui platform fix infos about Machine alfa40 SN {target_sn_alfa40} - alfaadmin SN {target_sn_alfaadmin}"
+                mail_subject = f"PIG platform fix recap - alfa40 SN {target_sn_alfa40} - alfaadmin SN {target_sn_alfaadmin}"
                 await self.__send_mail(credentials, mail_subject, mail_messages)
                 await self.__async_update_result_fixes_json(target_sn_alfa40, changelog_messages)
 
