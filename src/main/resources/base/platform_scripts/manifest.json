@@ -10,7 +10,12 @@
                     "fix_resolv_conf",
                     "fix_banana_platform"
                 ],
-                "docker_image_fixed": "alfa-legacy_arm64_v5.tar"
+                "docker_images": ["alfa-legacy_arm64_v5.tar", "alfa-legacy_arm64_v6.tar"]
+            },
+            "v6": {
+                "description": "Armbian 21.08.0-trunk Buster with Linux 5.10.51-meson64",
+                "fixes": [],
+                "docker_images": ["alfa-legacy_arm64_v5.tar", "alfa-legacy_arm64_v6.tar"]
             }
         },
         "raspberrypi": {}
