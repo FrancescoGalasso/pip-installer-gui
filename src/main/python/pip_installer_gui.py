@@ -357,6 +357,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         logging.debug('self: {}'.format(self))
         self.__async_qt_event_loop = self.__init_async_event_loop()
         self.run_forever()
+        self.send_mail = True
 
     def apply_fix_on_target(self, path_pem_file, machine_ip, docker_img_path):
         
@@ -533,11 +534,14 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         else:
             logging.info('Mail inviata !')
 
-    async def __update_docker_image(self, docker_img_path, manifest_docker_info, ssh_conn):
+    async def __update_docker_image(self, uploaded_docker_img_path, manifest_docker_infos, ssh_conn):
 
-        if manifest_docker_info not in docker_img_path:
+        logging.warning(f'uploaded_docker_img_path -> {uploaded_docker_img_path}')
+        immagine_docker = os.path.basename(uploaded_docker_img_path)
+        if immagine_docker not in manifest_docker_infos:
+        # if manifest_docker_info not in uploaded_docker_img_path:
             result_ko = 'Invalid Docker image! Skipping update Docker image ..'
-            logging.error(f'{docker_img_path} {result_ko}')
+            logging.error(f'{uploaded_docker_img_path} {result_ko}')
             self.main_window.update_gui_msg_board(f'{result_ko}')
             return result_ko
 
@@ -551,11 +555,11 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
         await asyncio.sleep(0.25)
         remote_path = '/home/admin/alfa-legacy_arm64.tar'
-        logging.debug(f'local path: {docker_img_path}')
+        logging.debug(f'local path: {uploaded_docker_img_path}')
         logging.debug(f'remote path: {remote_path}')
         await self.__async_paramiko_sftp_put(
             ssh_conn=ssh_conn,
-            local_path=docker_img_path,
+            local_path=uploaded_docker_img_path,
             remote_path=remote_path)
 
         docker_cmds = [
@@ -690,8 +694,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                                 changelog_messages.append(f'{datetime.datetime.now()} - Applied {curr_fix} on platform {target_plat_name} v{v[1:]}')
 
                         if extra and extra.get("docker_img"):
-                            docker_img_info = bananapim5_manifest.get(v, {}).get('docker_image_fixed', "")
-                            result = await self.__update_docker_image(extra.get("docker_img"), docker_img_info, ssh_conn)
+                            docker_imgs = bananapim5_manifest.get(v, {}).get('docker_images', [])
+                            result = await self.__update_docker_image(extra.get("docker_img"), docker_imgs, ssh_conn)
                             docker_msg = f'platform {target_plat_name} v{v[1:]} - {result}'
                             changelog_messages.append(f'{datetime.datetime.now()} - {docker_msg}')
                             mail_messages['docker message'] = docker_msg
@@ -742,10 +746,10 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                     mail_messages['platform message'] = _message
                     self.main_window.update_gui_msg_board(_message)
 
-                credentials = self.fbs_ctx.get_resource(MAIL_CREDENTIALS_FILE)
-
-                mail_subject = f"PIG platform fix recap - alfa40 SN {target_sn_alfa40} - alfaadmin SN {target_sn_alfaadmin}"
-                await self.__send_mail(credentials, mail_subject, mail_messages)
+                if self.send_mail:
+                    credentials = self.fbs_ctx.get_resource(MAIL_CREDENTIALS_FILE)
+                    mail_subject = f"PIG platform fix recap - alfa40 SN {target_sn_alfa40} - alfaadmin SN {target_sn_alfaadmin}"
+                    await self.__send_mail(credentials, mail_subject, mail_messages)
                 await self.__async_update_result_fixes_json(target_sn_alfa40, changelog_messages)
 
             if ssh_conn.get_transport() is not None and ssh_conn.get_transport().is_active():
