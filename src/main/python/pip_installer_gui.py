@@ -364,8 +364,6 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         logging.debug('self: {}'.format(self))
         self.__async_qt_event_loop = self.__init_async_event_loop()
         self.run_forever()
-        # self.send_mail = True
-        self.send_mail = False
 
     def apply_fix_on_target(self, path_pem_file, machine_ip, docker_img_path):
         
@@ -495,7 +493,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                 'marcolunghini@alfadispenser.com',
                 'fernandocarbajal@alfadispenser.com',
                 'alessandroveronesi@alfadispenser.com',
-                'lauragiamporcaro@alfadispenser.com'
+                'lauragiamporcaro@alfadispenser.com',
+                'amaelchacon@alfadispenser.com',
             ]
             # MAIL_RECIPIENTS = ['francescogalasso@alfadispenser.com']
 
@@ -750,7 +749,7 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                 else:
                     _message = 'Platform already fixed!'
                     if not manifest_platform:
-                        _message = 'The current platform does not need fixing!'
+                        _message = f'The current platform "{target_plat_name} v{target_plat_ver}" does not need fixing or Docker image update!'
                     mail_messages['platform message'] = _message
                     self.main_window.update_gui_msg_board(_message)
 

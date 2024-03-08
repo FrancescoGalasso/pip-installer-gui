@@ -33,3 +33,6 @@ Bananapi_CR4_485
 Armbian_bpi_alfalib
 Armbian_bpi_CR6_485
 Armbian_bpi_CR4_485
+
+[send_mail]
+enabled = True
