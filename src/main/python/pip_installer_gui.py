@@ -83,6 +83,13 @@ class Config:
                 s_list = list(s_d.keys())
                 self.config_dict.update({s: s_list})
 
+
+            if s == 'send_mail':
+                send_mail_str_value = self.config_parser[s].get('enabled', 'True').strip()
+                logging.warning(f'send_mail_str_value >>>> {send_mail_str_value}')
+                send_mail_bool_value = send_mail_str_value.lower() == 'true'
+                self.config_dict.update({s: send_mail_bool_value})
+                
         return self.config_dict
 
 
@@ -357,7 +364,8 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
         logging.debug('self: {}'.format(self))
         self.__async_qt_event_loop = self.__init_async_event_loop()
         self.run_forever()
-        self.send_mail = True
+        # self.send_mail = True
+        self.send_mail = False
 
     def apply_fix_on_target(self, path_pem_file, machine_ip, docker_img_path):
         
@@ -746,9 +754,10 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                     mail_messages['platform message'] = _message
                     self.main_window.update_gui_msg_board(_message)
 
-                if self.send_mail:
+                if CACHE.get("send_mail"):
                     credentials = self.fbs_ctx.get_resource(MAIL_CREDENTIALS_FILE)
                     mail_subject = f"PIG platform fix recap - alfa40 SN {target_sn_alfa40} - alfaadmin SN {target_sn_alfaadmin}"
+                    logging.info(f'mail_subject: {mail_subject}')
                     await self.__send_mail(credentials, mail_subject, mail_messages)
                 await self.__async_update_result_fixes_json(target_sn_alfa40, changelog_messages)
 
@@ -1252,22 +1261,28 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
 
     @staticmethod
     async def get_sn_from_alfa40(m_ip):
-        redis_bus_url = f'redis://{m_ip}:6379/0'
-        logging.info(f'redis_bus_url -> {m_ip}')
-        redis_bus = redis.StrictRedis(host=m_ip, port=6379)
-        start_time = time.time()
-        ret = None
-        while time.time() - start_time < 50:
-            ret = redis_bus.get('ALFA_CONFIG')
-            if ret:
-                logging.debug(f'ret -> {ret}')
-                break
-            await asyncio.sleep(1)
+        target_sn = None
+        try:
+            redis_bus_url = f'redis://{m_ip}:6379/0'
+            logging.info(f'redis_bus_url -> {m_ip}')
+            redis_bus = redis.StrictRedis(host=m_ip, port=6379)
+            start_time = time.time()
+            ret = None
+            waiting_time = 5 # sec
+            while time.time() - start_time < waiting_time:
+                ret = redis_bus.get('ALFA_CONFIG')
+                if ret:
+                    logging.debug(f'ret -> {ret}')
+                    break
+                await asyncio.sleep(1)
 
-        assert ret, "Key 'ALFA_CONFIG' not found in Redis bus after waiting for 50 seconds"
+            assert ret, f"Key 'ALFA_CONFIG' not found in Redis bus after waiting for {waiting_time} seconds"
 
-        config = json.loads(ret.decode())
-        target_sn = config.get('ALFA_SERIAL_NUMBER', 00000000)
+            config = json.loads(ret.decode())
+            target_sn = config.get('ALFA_SERIAL_NUMBER', 00000000)
+        except Exception:
+            logging.error(traceback.format_exc())
+
         return target_sn
 
     @staticmethod
@@ -1326,6 +1341,11 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                     'remote_autostart_path': '/home/admin/.config/lxsession/LXDE/autostart',
                 })
 
+            if 'send_mail' not in CACHE:
+                CACHE.update({
+                    'send_mail': True,
+                })
+
         except FileNotFoundError:
             file_not_found = '{} not FOUND!'.format(cfg_filename)
             logging.error(file_not_found)
@@ -1365,7 +1385,9 @@ class PipInstallerGuiApplication(QApplication):    # pylint: disable=too-many-in
                             'conf_files_path', 'configurations',
                             'remote_autostart_path', 'remote_supervisor_conf_path',
                             'remote_conf_path']
-        config_keys = list(config.keys())
+        optional_cfg_keys = ['send_mail']
+
+        config_keys = [key for key in config.keys() if key not in optional_cfg_keys]
         diffs = set(control_cfg_keys) - set(config_keys)
         if diffs:
             raise RuntimeError(f'Missing Config key(s) {diffs} ! Invalid Configuration.')
